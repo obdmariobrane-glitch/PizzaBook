@@ -2,11 +2,14 @@ import { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Notifications from 'expo-notifications';
+import Constants from 'expo-constants';
 import Icon from '@react-native-vector-icons/ionicons';
 
 import { useT } from '../../src/i18n/LanguageProvider';
 import { COLORS, SPACING, RADIUS } from '../../src/theme';
 import { reversePlan, Method } from '../../src/calculator';
+
+const IS_EXPO_GO = Constants.executionEnvironment === 'storeClient';
 
 function fmt(d: Date) {
   const day = d.toLocaleDateString(undefined, { weekday: 'short', day: '2-digit', month: 'short' });
@@ -43,6 +46,10 @@ export default function Planner() {
 
   const scheduleAll = async () => {
     if (Platform.OS === 'web' || !steps.length) return;
+    if (IS_EXPO_GO && Platform.OS === 'android') {
+      // Expo Go on Android doesn't support notifications since SDK 53
+      return;
+    }
     try {
       await Notifications.requestPermissionsAsync();
       for (const s of steps) {
