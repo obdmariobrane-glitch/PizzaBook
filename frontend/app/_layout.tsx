@@ -111,12 +111,11 @@ function AuthGate() {
     })();
   }, [user]);
 
-  // Auth gate
+  // Auth gate: allow anonymous browsing. Only redirect logged-in users off /login.
   useEffect(() => {
     if (loading) return;
     const inAuth = segments[0] === 'login';
-    if (!user && !inAuth) router.replace('/login');
-    else if (user && inAuth) router.replace('/(tabs)');
+    if (user && inAuth) router.replace('/(tabs)');
   }, [user, loading, segments, router]);
 
   if (loading) {

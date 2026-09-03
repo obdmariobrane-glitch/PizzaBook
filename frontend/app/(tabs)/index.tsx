@@ -1,241 +1,495 @@
-import { useEffect, useState, useCallback } from 'react';
-import { View, Text, StyleSheet, FlatList, Pressable, RefreshControl, ActivityIndicator, ScrollView } from 'react-native';
-import { Image } from 'expo-image';
-import { LinearGradient } from 'expo-linear-gradient';
-import { useRouter, useFocusEffect } from 'expo-router';
+import { useMemo, useState } from 'react';
+import { View, Text, StyleSheet, ScrollView, Pressable, Modal, TextInput, Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
 import Icon from '@react-native-vector-icons/ionicons';
 import * as Haptics from 'expo-haptics';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
-import { api, fileUrl, useAuth } from '../../src/auth';
 import { useT } from '../../src/i18n/LanguageProvider';
 import { COLORS, SPACING, RADIUS } from '../../src/theme';
+import { dimensionsCalc, doughCalc, bakingCalc, iceCalc, Method, OvenType } from '../../src/calculator';
+import { useAuth } from '../../src/auth';
 
-type Post = {
-  post_id: string; user_id: string; author_name: string; author_picture?: string;
-  caption: string; image_path?: string; image_url?: string;
-  recipe?: any; likes: string[]; likes_count: number; comments_count: number;
-  rating?: number | null;
-  created_at: string;
-};
+const DIAMETERS = [26, 28, 30, 33, 35, 40];
+const HYDRATIONS = [60, 62, 65, 68, 70, 72, 75, 78, 80];
+const ROOM_TEMPS = [18, 22, 26, 28];
 
-export default function Feed() {
+export default function CalculatorHome() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { t } = useT();
   const { user } = useAuth();
-  const [posts, setPosts] = useState<Post[]>([]);
-  const [featured, setFeatured] = useState<Post | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [filter, setFilter] = useState<'all' | 'direct' | 'biga' | 'poolish'>('all');
 
-  const load = useCallback(async () => {
-    try {
-      const q = filter === 'all' ? '' : `?method=${filter}`;
-      const [data, feat] = await Promise.all([
-        api(`/api/posts${q}`),
-        api('/api/posts/featured').catch(() => null),
-      ]);
-      setPosts(data);
-      setFeatured(feat);
-    } catch (e) {
-      // ignore
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, [filter]);
+  const [pizzas, setPizzas] = useState(4);
+  const [diameter, setDiameter] = useState(30);
+  const [customDiameter, setCustomDiameter] = useState('');
+  const [method, setMethod] = useState<Method>('direct');
+  const [hydration, setHydration] = useState(68);
+  const [roomTemp, setRoomTemp] = useState(22);
+  const [oven, setOven] = useState<OvenType>('homeStone');
+  const [moreTool, setMoreTool] = useState<null | 'school' | 'leftover' | 'shopping'>(null);
 
-  useFocusEffect(useCallback(() => { load(); }, [load]));
+  // Compute reactive
+  const dims = useMemo(() => dimensionsCalc(diameter, pizzas), [diameter, pizzas]);
+  const dough = useMemo(() => doughCalc({
+    pizzas, ballWeight: dims.doughBall, hydration,
+    saltPct: 2.8, oilPct: 2, method,
+    yeastType: 'fresh', mixing: 'hand',
+    roomTemp, fridgeTemp: 4, fermentation: 'coldLong',
+  }), [pizzas, dims.doughBall, hydration, method, roomTemp]);
+  const baking = useMemo(() => bakingCalc(oven), [oven]);
+  const iceNeeded = roomTemp >= 26;
+  const ice = useMemo(() => iceNeeded ? iceCalc(dough.water, roomTemp, 4) : null, [iceNeeded, dough.water, roomTemp]);
 
-  const onLike = async (post: Post) => {
-    try {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    } catch {}
-    try {
-      const r = await api(`/api/posts/${post.post_id}/like`, { method: 'POST' });
-      setPosts((prev) => prev.map((p) => p.post_id === post.post_id
-        ? { ...p, likes_count: r.likes_count, likes: r.liked ? [...p.likes, user!.user_id] : p.likes.filter(u => u !== user!.user_id) }
-        : p));
-    } catch {}
+  const setPizzasSafe = (n: number) => {
+    if (n < 1 || n > 20) return;
+    try { Haptics.selectionAsync(); } catch {}
+    setPizzas(n);
   };
 
-  const renderItem = ({ item }: { item: Post }) => {
-    const liked = user && item.likes?.includes(user.user_id);
-    return (
-      <Pressable
-        testID={`post-card-${item.post_id}`}
-        style={styles.card}
-        onPress={() => router.push(`/post/${item.post_id}`)}
-      >
-        <View style={styles.cardHeader}>
-          {item.author_picture ? (
-            <Image source={{ uri: item.author_picture }} style={styles.avatar} />
-          ) : (
-            <View style={[styles.avatar, styles.avatarFallback]}>
-              <Text style={styles.avatarInitial}>{item.author_name?.[0]?.toUpperCase() || '?'}</Text>
-            </View>
-          )}
-          <Text style={styles.authorName}>{item.author_name}</Text>
-        </View>
-        {item.image_url ? (
-          <View style={styles.imageWrap}>
-            <Image source={{ uri: fileUrl(item.image_url) }} style={styles.image} contentFit="cover" />
-            {item.recipe ? (
-              <View style={styles.recipeBadge}>
-                <Icon name="document-text" size={12} color="#fff" />
-                <Text style={styles.recipeBadgeText}>{t.feed.recipe}</Text>
-              </View>
-            ) : null}
-          </View>
-        ) : null}
-        <View style={styles.body}>
-          <Text style={styles.caption} numberOfLines={3}>{item.caption}</Text>
-          {item.rating ? (
-            <View style={styles.ratingRow}>
-              {[1,2,3,4,5].map(n => (
-                <Icon key={n} name={n <= (item.rating as number) ? 'star' : 'star-outline'} size={14} color={COLORS.brand} />
-              ))}
-              <Text style={styles.ratingText}>{t.feed.rating}</Text>
-            </View>
-          ) : null}
-          <View style={styles.actions}>
-            <Pressable testID={`like-btn-${item.post_id}`} onPress={() => onLike(item)} style={styles.action}>
-              <Icon name={liked ? 'flame' : 'flame-outline'} size={20} color={liked ? COLORS.brand : COLORS.muted} />
-              <Text style={[styles.actionText, liked && { color: COLORS.brand, fontWeight: '700' }]}>{item.likes_count}</Text>
-            </Pressable>
-            <View style={styles.action}>
-              <Icon name="chatbubble-outline" size={18} color={COLORS.muted} />
-              <Text style={styles.actionText}>{item.comments_count}</Text>
-            </View>
-          </View>
-        </View>
-      </Pressable>
-    );
+  const commitCustomDiameter = () => {
+    const v = parseFloat(customDiameter);
+    if (v >= 15 && v <= 60) setDiameter(Math.round(v));
+    setCustomDiameter('');
+  };
+
+  const saveRecipe = async () => {
+    const recipe = {
+      pizzas, diameter, hydration, method, flourType: '00',
+      ballWeight: dims.doughBall, flour: dough.flour, water: dough.water,
+      salt: dough.salt, oil: dough.oil, yeast: dough.yeast,
+    };
+    await AsyncStorage.setItem('lastRecipe', JSON.stringify(recipe));
+  };
+
+  const onShare = async () => {
+    try { Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); } catch {}
+    await saveRecipe();
+    if (!user) { router.push('/login'); return; }
+    router.push('/new-post');
+  };
+
+  const onShopping = async () => {
+    try { Haptics.selectionAsync(); } catch {}
+    await saveRecipe();
+    setMoreTool('shopping');
   };
 
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
       <View style={styles.header}>
-        <Text style={styles.title}>{t.feed.title}</Text>
-        <Pressable
-          testID="new-post-button"
-          onPress={() => router.push('/new-post')}
-          style={styles.newBtn}
-        >
-          <Icon name="add" size={22} color="#fff" />
-        </Pressable>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACING.sm }}>
+          <View style={styles.logo}><Text style={{ fontSize: 20 }}>🍕</Text></View>
+          <Text style={styles.title}>{t.appName}</Text>
+        </View>
+        <Text style={styles.subtitle}>{t.calc.title}</Text>
       </View>
 
-      <View style={styles.filterRow}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterContent}>
-          {([
-            { k: 'all' as const, label: t.feed.filterAll },
-            { k: 'direct' as const, label: t.calc.direct },
-            { k: 'biga' as const, label: t.calc.biga },
-            { k: 'poolish' as const, label: t.calc.poolish },
-          ]).map((f) => (
-            <Pressable
-              key={f.k}
-              testID={`filter-${f.k}`}
-              onPress={() => setFilter(f.k)}
-              style={[styles.filterChip, filter === f.k && styles.filterChipActive]}
-            >
-              <Text style={[styles.filterChipText, filter === f.k && { color: '#fff' }]}>{f.label}</Text>
-            </Pressable>
-          ))}
-        </ScrollView>
-      </View>
+      <ScrollView contentContainerStyle={{ padding: SPACING.lg, paddingBottom: SPACING.xxxl * 2, gap: SPACING.lg }}>
 
-      {loading ? (
-        <View style={styles.center}><ActivityIndicator color={COLORS.brand} /></View>
-      ) : posts.length === 0 ? (
-        <View style={styles.empty}>
-          <Text style={styles.emptyEmoji}>🍕</Text>
-          <Text style={styles.emptyText}>{t.feed.empty}</Text>
-          <Pressable style={styles.emptyBtn} onPress={() => router.push('/new-post')}>
-            <Text style={styles.emptyBtnText}>{t.feed.newPost}</Text>
+        {/* 1. Dimensions */}
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>{t.calc.dimensions}</Text>
+
+          <View style={styles.row}>
+            <Text style={styles.label}>{t.calc.pizzas}</Text>
+            <View style={styles.stepper}>
+              <Pressable testID="pizza-minus" onPress={() => setPizzasSafe(pizzas - 1)} style={styles.stepBtn}>
+                <Icon name="remove" size={22} color={COLORS.brand} />
+              </Pressable>
+              <Text style={styles.stepVal}>{pizzas}</Text>
+              <Pressable testID="pizza-plus" onPress={() => setPizzasSafe(pizzas + 1)} style={styles.stepBtn}>
+                <Icon name="add" size={22} color={COLORS.brand} />
+              </Pressable>
+            </View>
+          </View>
+
+          <Text style={[styles.label, { marginTop: SPACING.md }]}>{t.calc.diameter}</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+            {DIAMETERS.map((d) => (
+              <Pressable
+                key={d}
+                testID={`diam-${d}`}
+                onPress={() => { setDiameter(d); try { Haptics.selectionAsync(); } catch {} }}
+                style={[styles.chip, diameter === d && styles.chipActive]}
+              >
+                <Text style={[styles.chipText, diameter === d && styles.chipTextActive]}>{d} cm</Text>
+              </Pressable>
+            ))}
+            <View style={styles.customWrap}>
+              <TextInput
+                testID="custom-diameter"
+                value={customDiameter}
+                onChangeText={setCustomDiameter}
+                onBlur={commitCustomDiameter}
+                onSubmitEditing={commitCustomDiameter}
+                keyboardType="number-pad"
+                placeholder="cm"
+                placeholderTextColor={COLORS.muted}
+                style={styles.customInput}
+              />
+            </View>
+          </ScrollView>
+        </View>
+
+        {/* 2. Method + Hydration */}
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>{t.calc.method} + {t.calc.hydration}</Text>
+
+          <Text style={styles.label}>{t.calc.method}</Text>
+          <View style={styles.pillGroup}>
+            {[
+              { k: 'direct' as const, l: t.calc.direct },
+              { k: 'biga' as const, l: t.calc.biga },
+              { k: 'poolish' as const, l: t.calc.poolish },
+            ].map((m) => (
+              <Pressable
+                key={m.k}
+                testID={`method-${m.k}`}
+                onPress={() => { setMethod(m.k); try { Haptics.selectionAsync(); } catch {} }}
+                style={[styles.pill, method === m.k && styles.pillActive]}
+              >
+                <Text style={[styles.pillText, method === m.k && styles.pillTextActive]}>{m.l}</Text>
+              </Pressable>
+            ))}
+          </View>
+
+          <Text style={[styles.label, { marginTop: SPACING.md }]}>{t.calc.hydration}: <Text style={{ color: COLORS.brand, fontWeight: '800' }}>{hydration}%</Text></Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+            {HYDRATIONS.map((h) => (
+              <Pressable
+                key={h}
+                testID={`hyd-${h}`}
+                onPress={() => { setHydration(h); try { Haptics.selectionAsync(); } catch {} }}
+                style={[styles.chip, hydration === h && styles.chipActive]}
+              >
+                <Text style={[styles.chipText, hydration === h && styles.chipTextActive]}>{h}%</Text>
+              </Pressable>
+            ))}
+          </ScrollView>
+
+          <Text style={[styles.label, { marginTop: SPACING.md }]}>{t.calc.roomTemp}</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+            {ROOM_TEMPS.map((r) => (
+              <Pressable
+                key={r}
+                testID={`rt-${r}`}
+                onPress={() => setRoomTemp(r)}
+                style={[styles.chip, roomTemp === r && styles.chipActive]}
+              >
+                <Text style={[styles.chipText, roomTemp === r && styles.chipTextActive]}>{r}°C</Text>
+              </Pressable>
+            ))}
+          </ScrollView>
+        </View>
+
+        {/* 3. Oven */}
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>{t.calc.baking}</Text>
+          <View style={styles.ovenRow}>
+            <OvenCard active={oven === 'homeStone'} onPress={() => setOven('homeStone')} icon="flame" title={t.calc.homeStone} testID="oven-homeStone" />
+            <OvenCard active={oven === 'ooni'} onPress={() => setOven('ooni')} icon="pizza" title={t.calc.ooni} testID="oven-ooni" />
+            <OvenCard active={oven === 'homePan'} onPress={() => setOven('homePan')} icon="restaurant" title={t.calc.homePan} testID="oven-homePan" />
+          </View>
+        </View>
+
+        {/* 4. Recipe result (realtime) */}
+        <View style={styles.recipeCard}>
+          <Text style={styles.recipeSection}>Za 1 pizzu · {diameter} cm</Text>
+          <ResultRow label={t.calc.doughBall} value={`${dims.doughBall} g`} />
+          <ResultRow label={t.calc.sauce} value={`${dims.sauce} g`} />
+          <ResultRow label={t.calc.cheese} value={`${dims.cheese} g`} />
+
+          <Text style={[styles.recipeSection, { marginTop: SPACING.md }]}>
+            Ukupno · {pizzas} × {dims.doughBall}g = {dims.totalDough}g
+          </Text>
+          <ResultRow label="Brašno (00 / Tipo 0)" value={`${dough.flour} g`} highlight />
+          {ice ? (
+            <>
+              <ResultRow label={t.calc.coldWater} value={`${ice.water} g`} />
+              <ResultRow label={`🧊 ${t.calc.iceAmount}`} value={`${ice.ice} g`} highlight />
+            </>
+          ) : (
+            <ResultRow label={`${t.calc.totalWater} (${dough.waterTemp}°C)`} value={`${dough.water} g`} highlight />
+          )}
+          <ResultRow label={t.calc.saltAmount} value={`${dough.salt} g`} />
+          <ResultRow label={t.calc.yeastAmount + ' (svježi)'} value={`${dough.yeast} g`} />
+          <ResultRow label={t.calc.oilAmount} value={`${dough.oil} g`} />
+
+          {dough.biga ? (
+            <View style={styles.subBlock}>
+              <Text style={styles.subhead}>Biga (16-18h prije)</Text>
+              <ResultRow label={t.calc.totalFlour} value={`${dough.biga.flour} g`} />
+              <ResultRow label={t.calc.totalWater} value={`${dough.biga.water} g`} />
+              <ResultRow label={t.calc.yeastAmount} value={`${dough.biga.yeast} g`} />
+            </View>
+          ) : null}
+          {dough.poolish ? (
+            <View style={styles.subBlock}>
+              <Text style={styles.subhead}>Poolish (12-14h prije)</Text>
+              <ResultRow label={t.calc.totalFlour} value={`${dough.poolish.flour} g`} />
+              <ResultRow label={t.calc.totalWater} value={`${dough.poolish.water} g`} />
+              <ResultRow label={t.calc.yeastAmount} value={`${dough.poolish.yeast} g`} />
+            </View>
+          ) : null}
+
+          <View style={styles.bakeInfo}>
+            <Icon name="flame" size={16} color={COLORS.brand} />
+            <Text style={styles.bakeText}>{baking.temp} · {baking.time}</Text>
+          </View>
+
+          {hydration > 70 ? (
+            <View style={styles.warnBox}>
+              <Icon name="alert-circle" size={14} color={COLORS.warning} />
+              <Text style={styles.warnText}>{t.calc.hydrationWarning}</Text>
+            </View>
+          ) : null}
+        </View>
+
+        {/* 5. Actions */}
+        <View style={styles.actionsRow}>
+          <Pressable testID="add-shopping" style={[styles.actionBtn, { backgroundColor: COLORS.surfaceSecondary, borderWidth: 1, borderColor: COLORS.border }]} onPress={onShopping}>
+            <Icon name="cart" size={18} color={COLORS.brand} />
+            <Text style={[styles.actionBtnText, { color: COLORS.brand }]}>{t.shopping.title}</Text>
+          </Pressable>
+          <Pressable testID="share-community" style={[styles.actionBtn, { backgroundColor: COLORS.brand }]} onPress={onShare}>
+            <Icon name="share" size={18} color="#fff" />
+            <Text style={[styles.actionBtnText, { color: '#fff' }]}>Podijeli na Zid</Text>
           </Pressable>
         </View>
-      ) : (
-        <FlatList
-          data={posts}
-          keyExtractor={(p) => p.post_id}
-          renderItem={renderItem}
-          ListHeaderComponent={featured ? (
-            <Pressable
-              testID="featured-post"
-              onPress={() => router.push(`/post/${featured.post_id}`)}
-              style={styles.featured}
-            >
-              {featured.image_url ? (
-                <Image source={{ uri: fileUrl(featured.image_url) }} style={styles.featuredImage} contentFit="cover" />
-              ) : null}
-              <LinearGradient colors={['transparent', 'rgba(28,25,23,0.95)']} style={styles.featuredScrim} />
-              <View style={styles.featuredBadge}>
-                <Icon name="trophy" size={12} color="#fff" />
-                <Text style={styles.featuredBadgeText}>{t.feed.featured}</Text>
-              </View>
-              <View style={styles.featuredBody}>
-                <Text style={styles.featuredName}>{featured.author_name}</Text>
-                <Text style={styles.featuredCaption} numberOfLines={2}>{featured.caption}</Text>
-                <View style={styles.featuredMeta}>
-                  <Icon name="flame" size={14} color="#fff" />
-                  <Text style={styles.featuredMetaText}>{featured.likes_count}</Text>
-                </View>
-              </View>
-            </Pressable>
-          ) : null}
-          contentContainerStyle={{ padding: SPACING.lg, paddingBottom: SPACING.xxxl, gap: SPACING.lg }}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={COLORS.brand} />}
-        />
-      )}
+
+        {/* More tools */}
+        <View style={styles.moreRow}>
+          <MoreLink icon="book" label={t.calc.school} onPress={() => setMoreTool('school')} testID="more-school" />
+          <MoreLink icon="restaurant-outline" label={t.calc.leftover} onPress={() => setMoreTool('leftover')} testID="more-leftover" />
+        </View>
+
+      </ScrollView>
+
+      <Modal visible={!!moreTool} animationType="slide" onRequestClose={() => setMoreTool(null)}>
+        {moreTool === 'school' && <SchoolModal onClose={() => setMoreTool(null)} />}
+        {moreTool === 'leftover' && <LeftoverModal onClose={() => setMoreTool(null)} />}
+        {moreTool === 'shopping' && <ShoppingModal onClose={() => setMoreTool(null)} />}
+      </Modal>
     </View>
   );
 }
 
+// ============= HELPERS =============
+function ResultRow({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) {
+  return (
+    <View style={styles.resRow}>
+      <Text style={styles.resLabel}>{label}</Text>
+      <Text style={[styles.resValue, highlight && { color: COLORS.brand, fontSize: 16 }]}>{value}</Text>
+    </View>
+  );
+}
+
+function OvenCard({ active, onPress, icon, title, testID }: any) {
+  return (
+    <Pressable testID={testID} onPress={onPress} style={[styles.ovenCard, active && styles.ovenCardActive]}>
+      <Icon name={icon} size={26} color={active ? '#fff' : COLORS.brand} />
+      <Text style={[styles.ovenText, active && { color: '#fff' }]} numberOfLines={2}>{title}</Text>
+    </Pressable>
+  );
+}
+
+function MoreLink({ icon, label, onPress, testID }: any) {
+  return (
+    <Pressable testID={testID} onPress={onPress} style={styles.moreLink}>
+      <Icon name={icon} size={16} color={COLORS.brand} />
+      <Text style={styles.moreLinkText}>{label}</Text>
+    </Pressable>
+  );
+}
+
+function ModalHeader({ title, onClose }: { title: string; onClose: () => void }) {
+  const insets = useSafeAreaInsets();
+  return (
+    <View style={[styles.modalHeader, { paddingTop: insets.top + SPACING.sm }]}>
+      <Pressable onPress={onClose} testID="modal-close"><Icon name="close" size={26} color={COLORS.onSurface} /></Pressable>
+      <Text style={styles.modalTitle}>{title}</Text>
+      <View style={{ width: 26 }} />
+    </View>
+  );
+}
+
+// ============= MODALS =============
+function SchoolModal({ onClose }: { onClose: () => void }) {
+  const { t } = useT();
+  return (
+    <View style={styles.modalRoot}>
+      <ModalHeader title={t.school.title} onClose={onClose} />
+      <ScrollView contentContainerStyle={{ padding: SPACING.lg, gap: SPACING.md, paddingBottom: SPACING.xxxl }}>
+        {t.school.rules.map((r, i) => (
+          <View key={i} style={styles.ruleCard}>
+            <Icon name="star" size={16} color={COLORS.brand} />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.ruleTitle}>{r.title}</Text>
+              <Text style={styles.ruleBody}>{r.body}</Text>
+            </View>
+          </View>
+        ))}
+      </ScrollView>
+    </View>
+  );
+}
+
+function LeftoverModal({ onClose }: { onClose: () => void }) {
+  const { t } = useT();
+  return (
+    <View style={styles.modalRoot}>
+      <ModalHeader title={t.leftover.title} onClose={onClose} />
+      <ScrollView contentContainerStyle={{ padding: SPACING.lg, gap: SPACING.md, paddingBottom: SPACING.xxxl }}>
+        <Text style={{ color: COLORS.muted, fontSize: 13 }}>{t.leftover.subtitle}</Text>
+        {t.leftover.tips.map((tip, i) => (
+          <View key={i} style={styles.ruleCard}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.ruleTitle}>{tip.title}</Text>
+              <Text style={styles.ruleBody}>{tip.body}</Text>
+            </View>
+          </View>
+        ))}
+      </ScrollView>
+    </View>
+  );
+}
+
+function ShoppingModal({ onClose }: { onClose: () => void }) {
+  const { t } = useT();
+  const [recipe, setRecipe] = useState<any>(null);
+  const [copied, setCopied] = useState(false);
+
+  useMemo(() => {
+    AsyncStorage.getItem('lastRecipe').then((v) => { if (v) setRecipe(JSON.parse(v)); });
+  }, []);
+
+  if (!recipe) {
+    return (
+      <View style={styles.modalRoot}>
+        <ModalHeader title={t.shopping.title} onClose={onClose} />
+      </View>
+    );
+  }
+
+  const items = [
+    { qty: `${recipe.flour} g`, name: `Brašno ${recipe.flourType || '00'}` },
+    { qty: `${recipe.water} g`, name: 'Voda' },
+    { qty: `${recipe.salt} g`, name: 'Sol' },
+    { qty: `${recipe.yeast} g`, name: 'Kvasac' },
+    ...(recipe.oil > 0 ? [{ qty: `${recipe.oil} g`, name: 'Maslinovo ulje' }] : []),
+  ];
+
+  const listText = `Pizzabook - Recept za ${recipe.pizzas} pizze:\n\n` +
+    items.map((it) => `• ${it.qty} — ${it.name}`).join('\n') +
+    '\n\n' + t.shopping.extras + ':\n' +
+    t.shopping.extrasList.map((x) => `• ${x}`).join('\n');
+
+  const doCopy = async () => {
+    try {
+      if (Platform.OS === 'web') {
+        await navigator.clipboard.writeText(listText);
+      } else {
+        const { setStringAsync } = await import('expo-clipboard').catch(() => ({ setStringAsync: null as any }));
+        if (setStringAsync) await setStringAsync(listText);
+      }
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {}
+  };
+
+  return (
+    <View style={styles.modalRoot}>
+      <ModalHeader title={t.shopping.title} onClose={onClose} />
+      <ScrollView contentContainerStyle={{ padding: SPACING.lg, gap: SPACING.md, paddingBottom: SPACING.xxxl }}>
+        <Text style={{ color: COLORS.muted, fontSize: 13 }}>{t.shopping.subtitle}</Text>
+        <View style={styles.recipeCard}>
+          <Text style={styles.recipeSection}>Za {recipe.pizzas} pizze · {recipe.hydration}% · {recipe.method}</Text>
+          {items.map((it, i) => (<ResultRow key={i} label={it.name} value={it.qty} />))}
+        </View>
+        <View style={styles.recipeCard}>
+          <Text style={styles.recipeSection}>{t.shopping.extras}</Text>
+          {t.shopping.extrasList.map((x, i) => (
+            <View key={i} style={styles.extraRow}>
+              <Icon name="checkmark-circle" size={16} color={COLORS.brand} />
+              <Text style={styles.extraText}>{x}</Text>
+            </View>
+          ))}
+        </View>
+        <Pressable style={styles.copyBtn} onPress={doCopy} testID="copy-shopping-btn">
+          <Icon name={copied ? 'checkmark' : 'copy'} size={16} color="#fff" />
+          <Text style={styles.copyBtnText}>{copied ? t.shopping.copied : t.shopping.copy}</Text>
+        </Pressable>
+      </ScrollView>
+    </View>
+  );
+}
+
+// ============= STYLES =============
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: COLORS.surface },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: SPACING.lg, paddingVertical: SPACING.md },
-  title: { fontSize: 28, fontWeight: '800', color: COLORS.onSurface, letterSpacing: -0.5 },
-  newBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: COLORS.brand, alignItems: 'center', justifyContent: 'center' },
-  filterRow: { height: 56, justifyContent: 'center', borderBottomWidth: 1, borderBottomColor: COLORS.divider, backgroundColor: COLORS.surface },
-  filterContent: { paddingHorizontal: SPACING.lg, gap: SPACING.sm, alignItems: 'center' },
-  filterChip: { paddingHorizontal: SPACING.md, height: 36, borderRadius: RADIUS.pill, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.surfaceSecondary, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
-  filterChipActive: { backgroundColor: COLORS.brand, borderColor: COLORS.brand },
-  filterChipText: { color: COLORS.onSurface, fontSize: 13, fontWeight: '600' },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  empty: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: SPACING.md, paddingHorizontal: SPACING.xl },
-  emptyEmoji: { fontSize: 60 },
-  emptyText: { fontSize: 16, color: COLORS.muted, textAlign: 'center' },
-  emptyBtn: { backgroundColor: COLORS.brand, paddingHorizontal: SPACING.xl, paddingVertical: SPACING.md, borderRadius: RADIUS.pill },
-  emptyBtnText: { color: '#fff', fontWeight: '700' },
-  card: { backgroundColor: COLORS.surfaceSecondary, borderRadius: RADIUS.lg, overflow: 'hidden', borderWidth: 1, borderColor: COLORS.border },
-  cardHeader: { flexDirection: 'row', alignItems: 'center', padding: SPACING.md, gap: SPACING.md },
-  avatar: { width: 36, height: 36, borderRadius: 18 },
-  avatarFallback: { backgroundColor: COLORS.brandTertiary, alignItems: 'center', justifyContent: 'center' },
-  avatarInitial: { color: COLORS.onBrandTertiary, fontWeight: '800' },
-  authorName: { fontSize: 15, fontWeight: '700', color: COLORS.onSurface },
-  imageWrap: { width: '100%', aspectRatio: 1, backgroundColor: COLORS.surfaceTertiary, position: 'relative' },
-  image: { width: '100%', height: '100%' },
-  recipeBadge: { position: 'absolute', bottom: SPACING.md, left: SPACING.md, backgroundColor: COLORS.brand, paddingHorizontal: SPACING.md, paddingVertical: 6, borderRadius: RADIUS.pill, flexDirection: 'row', gap: 4, alignItems: 'center' },
-  recipeBadgeText: { color: '#fff', fontSize: 11, fontWeight: '700' },
-  body: { padding: SPACING.md, gap: SPACING.sm },
-  caption: { fontSize: 15, color: COLORS.onSurface, lineHeight: 22 },
-  actions: { flexDirection: 'row', gap: SPACING.xl, marginTop: SPACING.xs },
-  action: { flexDirection: 'row', gap: 6, alignItems: 'center' },
-  actionText: { color: COLORS.muted, fontSize: 14, fontWeight: '600' },
-  ratingRow: { flexDirection: 'row', gap: 4, alignItems: 'center', marginTop: 6 },
-  ratingText: { color: COLORS.muted, fontSize: 12, marginLeft: 4 },
-  featured: { borderRadius: RADIUS.lg, overflow: 'hidden', backgroundColor: COLORS.surfaceInverse, aspectRatio: 16 / 10, marginBottom: SPACING.sm, position: 'relative' },
-  featuredImage: { ...StyleSheet.absoluteFillObject as any, width: '100%', height: '100%' },
-  featuredScrim: { position: 'absolute', left: 0, right: 0, bottom: 0, height: '65%' },
-  featuredBadge: { position: 'absolute', top: SPACING.md, left: SPACING.md, backgroundColor: COLORS.brand, paddingHorizontal: SPACING.md, paddingVertical: 6, borderRadius: RADIUS.pill, flexDirection: 'row', gap: 4, alignItems: 'center' },
-  featuredBadgeText: { color: '#fff', fontSize: 11, fontWeight: '800', letterSpacing: 0.5, textTransform: 'uppercase' },
-  featuredBody: { position: 'absolute', left: SPACING.lg, right: SPACING.lg, bottom: SPACING.lg, gap: 4 },
-  featuredName: { color: '#fff', fontSize: 13, fontWeight: '700', opacity: 0.85 },
-  featuredCaption: { color: '#fff', fontSize: 17, fontWeight: '800', lineHeight: 22 },
-  featuredMeta: { flexDirection: 'row', gap: 4, alignItems: 'center', marginTop: 4 },
-  featuredMetaText: { color: '#fff', fontSize: 13, fontWeight: '700' },
+  header: { paddingHorizontal: SPACING.lg, paddingVertical: SPACING.md, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  logo: { width: 32, height: 32, borderRadius: 16, backgroundColor: COLORS.brandTertiary, alignItems: 'center', justifyContent: 'center' },
+  title: { fontSize: 22, fontWeight: '800', color: COLORS.onSurface, letterSpacing: -0.5 },
+  subtitle: { fontSize: 13, color: COLORS.muted, fontWeight: '600' },
+
+  card: { backgroundColor: COLORS.surfaceSecondary, padding: SPACING.lg, borderRadius: RADIUS.lg, borderWidth: 1, borderColor: COLORS.border, gap: SPACING.sm },
+  cardTitle: { fontSize: 13, color: COLORS.brand, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: SPACING.sm },
+  row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  label: { fontSize: 13, color: COLORS.muted, fontWeight: '600' },
+
+  stepper: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md, backgroundColor: COLORS.surface, borderRadius: RADIUS.pill, paddingHorizontal: 4, borderWidth: 1, borderColor: COLORS.border },
+  stepBtn: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
+  stepVal: { fontSize: 18, fontWeight: '800', color: COLORS.onSurface, minWidth: 32, textAlign: 'center' },
+
+  chipRow: { gap: SPACING.sm, paddingRight: SPACING.md },
+  chip: { paddingHorizontal: SPACING.md, height: 36, borderRadius: RADIUS.pill, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  chipActive: { backgroundColor: COLORS.brand, borderColor: COLORS.brand },
+  chipText: { color: COLORS.onSurface, fontSize: 13, fontWeight: '600' },
+  chipTextActive: { color: '#fff' },
+  customWrap: { justifyContent: 'center', flexShrink: 0 },
+  customInput: { minWidth: 60, height: 36, borderRadius: RADIUS.pill, borderWidth: 1, borderColor: COLORS.borderStrong, borderStyle: 'dashed', paddingHorizontal: SPACING.md, fontSize: 13, color: COLORS.onSurface, textAlign: 'center' },
+
+  pillGroup: { flexDirection: 'row', gap: SPACING.sm },
+  pill: { flex: 1, paddingVertical: 10, borderRadius: RADIUS.md, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border, alignItems: 'center' },
+  pillActive: { backgroundColor: COLORS.brand, borderColor: COLORS.brand },
+  pillText: { color: COLORS.onSurface, fontSize: 14, fontWeight: '700' },
+  pillTextActive: { color: '#fff' },
+
+  ovenRow: { flexDirection: 'row', gap: SPACING.sm },
+  ovenCard: { flex: 1, paddingVertical: SPACING.md, paddingHorizontal: SPACING.sm, borderRadius: RADIUS.md, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border, alignItems: 'center', gap: 6, minHeight: 88 },
+  ovenCardActive: { backgroundColor: COLORS.brand, borderColor: COLORS.brand },
+  ovenText: { color: COLORS.onSurface, fontSize: 11, fontWeight: '700', textAlign: 'center' },
+
+  recipeCard: { backgroundColor: COLORS.surfaceSecondary, padding: SPACING.lg, borderRadius: RADIUS.lg, borderWidth: 1, borderColor: COLORS.border, gap: 4 },
+  recipeSection: { fontSize: 13, color: COLORS.brand, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6, marginTop: 4 },
+  resRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: COLORS.divider },
+  resLabel: { color: COLORS.muted, fontSize: 14, flex: 1 },
+  resValue: { color: COLORS.onSurface, fontSize: 15, fontWeight: '700' },
+  subBlock: { marginTop: SPACING.md, gap: 4, paddingTop: SPACING.sm, borderTopWidth: 2, borderTopColor: COLORS.brand },
+  subhead: { fontSize: 12, color: COLORS.brand, fontWeight: '800', textTransform: 'uppercase', marginBottom: 4 },
+  bakeInfo: { flexDirection: 'row', gap: SPACING.sm, alignItems: 'center', marginTop: SPACING.md, paddingTop: SPACING.md, borderTopWidth: 1, borderTopColor: COLORS.divider },
+  bakeText: { fontSize: 14, color: COLORS.onSurface, fontWeight: '700' },
+  warnBox: { flexDirection: 'row', gap: SPACING.sm, alignItems: 'flex-start', backgroundColor: '#FEF3C7', padding: SPACING.md, borderRadius: RADIUS.md, marginTop: SPACING.md },
+  warnText: { flex: 1, color: COLORS.onSurface, fontSize: 12 },
+
+  actionsRow: { flexDirection: 'row', gap: SPACING.sm },
+  actionBtn: { flex: 1, flexDirection: 'row', gap: SPACING.sm, alignItems: 'center', justifyContent: 'center', paddingVertical: 14, borderRadius: RADIUS.md },
+  actionBtnText: { fontSize: 14, fontWeight: '700' },
+
+  moreRow: { flexDirection: 'row', gap: SPACING.md, justifyContent: 'center', paddingVertical: SPACING.md },
+  moreLink: { flexDirection: 'row', gap: 6, alignItems: 'center' },
+  moreLinkText: { color: COLORS.brand, fontSize: 13, fontWeight: '600' },
+
+  modalRoot: { flex: 1, backgroundColor: COLORS.surface },
+  modalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: SPACING.lg, paddingBottom: SPACING.md, borderBottomWidth: 1, borderBottomColor: COLORS.border, backgroundColor: COLORS.surfaceSecondary },
+  modalTitle: { fontSize: 17, fontWeight: '700', color: COLORS.onSurface },
+  ruleCard: { flexDirection: 'row', gap: SPACING.md, backgroundColor: COLORS.surfaceSecondary, padding: SPACING.lg, borderRadius: RADIUS.lg, borderWidth: 1, borderColor: COLORS.border },
+  ruleTitle: { fontSize: 15, fontWeight: '800', color: COLORS.onSurface, marginBottom: 4 },
+  ruleBody: { fontSize: 14, color: COLORS.onSurfaceTertiary, lineHeight: 20 },
+  extraRow: { flexDirection: 'row', gap: SPACING.sm, alignItems: 'center', paddingVertical: 6 },
+  extraText: { color: COLORS.onSurface, fontSize: 14 },
+  copyBtn: { flexDirection: 'row', gap: SPACING.sm, alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.brand, paddingVertical: 14, borderRadius: RADIUS.md, marginTop: SPACING.sm },
+  copyBtnText: { color: '#fff', fontSize: 15, fontWeight: '700' },
 });

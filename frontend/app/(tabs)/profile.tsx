@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, ImageBackground } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
 import { Image } from 'expo-image';
 import Icon from '@react-native-vector-icons/ionicons';
 
@@ -12,6 +13,7 @@ import { COLORS, SPACING, RADIUS } from '../../src/theme';
 
 export default function Profile() {
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const { user, logout, updateProfile } = useAuth();
   const { t, lang, setLang } = useT();
 
@@ -28,6 +30,58 @@ export default function Profile() {
       setEdit(false);
     } finally { setSaving(false); }
   };
+
+  // Anonymous user view - login CTA + language picker
+  if (!user) {
+    return (
+      <View style={styles.root}>
+        <ImageBackground
+          source={{ uri: 'https://images.unsplash.com/photo-1579751626657-72bc17010498' }}
+          style={styles.hero}
+          resizeMode="cover"
+        >
+          <LinearGradient colors={['rgba(28,25,23,0.2)', 'rgba(28,25,23,0.9)']} style={StyleSheet.absoluteFill} />
+          <View style={[styles.heroInner, { paddingTop: insets.top + SPACING.lg }]}>
+            <View style={styles.heroTop}>
+              <Text style={styles.heroTitle}>{t.profile.title}</Text>
+              <View />
+            </View>
+            <View style={styles.avatarWrap}>
+              <View style={[styles.avatar, styles.avatarFallback]}>
+                <Text style={styles.avatarInitial}>?</Text>
+              </View>
+              <Text style={styles.heroName}>{t.login.title}</Text>
+            </View>
+          </View>
+        </ImageBackground>
+        <ScrollView contentContainerStyle={{ padding: SPACING.lg, paddingBottom: insets.bottom + SPACING.xxxl, gap: SPACING.lg }}>
+          <View style={styles.card}>
+            <Text style={styles.section}>{t.login.title}</Text>
+            <Text style={styles.bodyText}>{t.login.subtitle}</Text>
+            <Pressable testID="profile-login-btn" style={styles.saveBtn} onPress={() => router.push('/login')}>
+              <Text style={styles.saveBtnText}>{t.login.google}</Text>
+            </Pressable>
+          </View>
+          <View style={styles.card}>
+            <Text style={styles.section}>{t.profile.language}</Text>
+            <View style={{ flexDirection: 'row', gap: SPACING.sm }}>
+              {LANGS.map((l) => (
+                <Pressable
+                  key={l.code}
+                  testID={`lang-${l.code}`}
+                  onPress={() => setLang(l.code as Lang)}
+                  style={[styles.langChip, lang === l.code && styles.langChipActive]}
+                >
+                  <Text style={[styles.langFlag, lang === l.code && { color: '#fff' }]}>{l.flag}</Text>
+                  <Text style={[styles.langLabel, lang === l.code && { color: '#fff' }]}>{l.label}</Text>
+                </Pressable>
+              ))}
+            </View>
+          </View>
+        </ScrollView>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.root}>

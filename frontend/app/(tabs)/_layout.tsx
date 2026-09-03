@@ -1,5 +1,5 @@
 import { Tabs } from 'expo-router';
-import { Platform, View } from 'react-native';
+import { Platform } from 'react-native';
 import { BlurView } from 'expo-blur';
 import Icon from '@react-native-vector-icons/ionicons';
 import { COLORS } from '../../src/theme';
@@ -29,15 +29,15 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: t.tabs.feed,
-          tabBarIcon: ({ color, size }) => <Icon name="pizza" size={size} color={color} />,
+          title: t.tabs.calc,
+          tabBarIcon: ({ color, size }) => <Icon name="calculator" size={size} color={color} />,
         }}
       />
       <Tabs.Screen
-        name="calculator"
+        name="feed"
         options={{
-          title: t.tabs.calc,
-          tabBarIcon: ({ color, size }) => <Icon name="calculator" size={size} color={color} />,
+          title: t.tabs.feed,
+          tabBarIcon: ({ color, size }) => <Icon name="pizza" size={size} color={color} />,
         }}
       />
       <Tabs.Screen
