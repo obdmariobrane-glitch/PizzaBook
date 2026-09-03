@@ -92,6 +92,8 @@ export default function PostDetail() {
             </View>
           ) : null}
 
+          <RatingSection post={post} onUpdate={setPost} />
+
           <Text style={[styles.section, { marginTop: SPACING.xl }]}>{t.feed.comment}s ({comments.length})</Text>
           {comments.map((c) => (
             <View key={c.comment_id} style={styles.comment}>
@@ -131,6 +133,38 @@ function RecipeLine({ label, value }: { label: string; value: string }) {
   );
 }
 
+function RatingSection({ post, onUpdate }: { post: any; onUpdate: (p: any) => void }) {
+  const { user } = useAuth();
+  const { t } = useT();
+  const isAuthor = user?.user_id === post.user_id;
+  const rating = post.rating || 0;
+
+  const setRating = async (n: number) => {
+    if (!isAuthor) return;
+    const newVal = rating === n ? 0 : n;
+    if (newVal < 1) return; // can't unset to 0 via API; keep min 1
+    try {
+      await api(`/api/posts/${post.post_id}/rating`, { method: 'POST', body: JSON.stringify({ rating: n }) });
+      onUpdate({ ...post, rating: n });
+    } catch {}
+  };
+
+  if (!isAuthor && !rating) return null;
+
+  return (
+    <View style={styles.ratingCard}>
+      <Text style={styles.ratingTitle}>{isAuthor ? t.feed.rateYourPizza : t.feed.rating}</Text>
+      <View style={styles.starsRow}>
+        {[1,2,3,4,5].map(n => (
+          <Pressable key={n} testID={`detail-star-${n}`} onPress={() => setRating(n)} disabled={!isAuthor} style={styles.starBtn}>
+            <Icon name={n <= rating ? 'star' : 'star-outline'} size={28} color={COLORS.brand} />
+          </Pressable>
+        ))}
+      </View>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: COLORS.surface },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: SPACING.lg, paddingBottom: SPACING.md, backgroundColor: COLORS.surfaceSecondary, borderBottomWidth: 1, borderBottomColor: COLORS.border },
@@ -146,6 +180,10 @@ const styles = StyleSheet.create({
   recipeLine: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 4 },
   recipeLabel: { color: COLORS.onBrandTertiary, fontSize: 13 },
   recipeValue: { color: COLORS.onSurface, fontSize: 14, fontWeight: '700' },
+  ratingCard: { marginTop: SPACING.md, backgroundColor: COLORS.surfaceSecondary, borderRadius: RADIUS.lg, padding: SPACING.lg, borderWidth: 1, borderColor: COLORS.border, alignItems: 'flex-start', gap: SPACING.sm },
+  ratingTitle: { fontSize: 13, color: COLORS.muted, fontWeight: '700', textTransform: 'uppercase' },
+  starsRow: { flexDirection: 'row', gap: 6 },
+  starBtn: { padding: 2 },
   section: { fontSize: 13, color: COLORS.muted, fontWeight: '700', textTransform: 'uppercase' },
   comment: { flexDirection: 'row', gap: SPACING.md, paddingVertical: SPACING.md, borderBottomWidth: 1, borderBottomColor: COLORS.divider },
   commentAvatar: { width: 32, height: 32, borderRadius: 16, backgroundColor: COLORS.brandTertiary, alignItems: 'center', justifyContent: 'center' },

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, Modal, Platform, KeyboardAvoidingView } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from '@react-native-vector-icons/ionicons';
@@ -9,7 +9,7 @@ import { COLORS, SPACING, RADIUS } from '../../src/theme';
 import { dimensionsCalc, doughCalc, bakingCalc, iceCalc, Method, YeastType, Mixing, Fermentation, OvenType } from '../../src/calculator';
 import { translations } from '../../src/i18n/translations';
 
-type Tool = null | 'dimensions' | 'dough' | 'baking' | 'ice' | 'school';
+type Tool = null | 'dimensions' | 'dough' | 'baking' | 'ice' | 'shopping' | 'leftover' | 'school';
 
 export default function Calculator() {
   const insets = useSafeAreaInsets();
@@ -21,6 +21,8 @@ export default function Calculator() {
     { id: 'dough' as const, icon: 'flask' as const, title: t.calc.dough, desc: t.calc.doughDesc, color: '#E87121' },
     { id: 'baking' as const, icon: 'flame' as const, title: t.calc.baking, desc: t.calc.bakingDesc, color: '#B84A00' },
     { id: 'ice' as const, icon: 'snow' as const, title: t.calc.ice, desc: t.calc.iceDesc, color: '#8C3A00' },
+    { id: 'shopping' as const, icon: 'cart' as const, title: t.calc.shopping, desc: t.calc.shoppingDesc, color: '#B4531A' },
+    { id: 'leftover' as const, icon: 'restaurant' as const, title: t.calc.leftover, desc: t.calc.leftoverDesc, color: '#7C4A25' },
     { id: 'school' as const, icon: 'book' as const, title: t.calc.school, desc: '', color: '#2D6A4F' },
   ];
 
@@ -47,6 +49,8 @@ export default function Calculator() {
         {tool === 'dough' && <DoughTool onClose={() => setTool(null)} />}
         {tool === 'baking' && <BakingTool onClose={() => setTool(null)} />}
         {tool === 'ice' && <IceTool onClose={() => setTool(null)} />}
+        {tool === 'shopping' && <ShoppingTool onClose={() => setTool(null)} onOpenDough={() => setTool('dough')} />}
+        {tool === 'leftover' && <LeftoverTool onClose={() => setTool(null)} />}
         {tool === 'school' && <SchoolTool onClose={() => setTool(null)} />}
       </Modal>
     </View>
@@ -328,6 +332,112 @@ function IceTool({ onClose }: any) {
   );
 }
 
+// --- SHOPPING LIST ---
+function ShoppingTool({ onClose, onOpenDough }: { onClose: () => void; onOpenDough: () => void }) {
+  const { t } = useT();
+  const [recipe, setRecipe] = useState<any>(null);
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    AsyncStorage.getItem('lastRecipe').then((v) => { if (v) setRecipe(JSON.parse(v)); });
+  }, []);
+
+  const flourType = (recipe?.flourType) || '00';
+
+  const items = recipe ? [
+    { qty: `${recipe.flour} g`, name: `Brašno ${flourType}` },
+    { qty: `${recipe.water} g`, name: 'Voda' },
+    { qty: `${recipe.salt} g`, name: 'Sol' },
+    { qty: `${recipe.yeast} g`, name: 'Kvasac' },
+    ...(recipe.oil > 0 ? [{ qty: `${recipe.oil} g`, name: 'Maslinovo ulje' }] : []),
+  ] : [];
+
+  const listText = recipe
+    ? `Pizzabook - Recept za ${recipe.pizzas} pizze:\n\n` +
+      items.map((it) => `• ${it.qty} — ${it.name}`).join('\n') +
+      '\n\n' + t.shopping.extras + ':\n' +
+      t.shopping.extrasList.map((x) => `• ${x}`).join('\n')
+    : '';
+
+  const doCopy = async () => {
+    try {
+      if (Platform.OS === 'web') {
+        await navigator.clipboard.writeText(listText);
+      } else {
+        const Clipboard = require('react-native').Clipboard;
+        Clipboard?.setString?.(listText);
+      }
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {}
+  };
+
+  return (
+    <View style={styles.modalRoot}>
+      <ModalHeader title={t.shopping.title} onClose={onClose} />
+      <ScrollView contentContainerStyle={styles.modalBody}>
+        <Text style={{ fontSize: 13, color: COLORS.muted }}>{t.shopping.subtitle}</Text>
+        {!recipe ? (
+          <View style={{ alignItems: 'center', gap: SPACING.md, paddingVertical: SPACING.xxxl }}>
+            <Icon name="cart-outline" size={44} color={COLORS.muted} />
+            <Text style={{ textAlign: 'center', color: COLORS.muted, paddingHorizontal: SPACING.xl }}>{t.shopping.empty}</Text>
+            <Pressable style={styles.primaryBtn} onPress={() => { onClose(); setTimeout(onOpenDough, 250); }} testID="open-dough-btn">
+              <Icon name="flask" size={16} color="#fff" />
+              <Text style={styles.primaryBtnText}>{t.shopping.openCalc}</Text>
+            </Pressable>
+          </View>
+        ) : (
+          <>
+            <View style={styles.resultCard}>
+              <Text style={styles.resultTitle}>Za {recipe.pizzas} pizze · {recipe.hydration}% · {recipe.method}</Text>
+              {items.map((it, i) => (
+                <View key={i} style={styles.resultRow}>
+                  <Text style={styles.resultLabel}>{it.name}</Text>
+                  <Text style={styles.resultValue}>{it.qty}</Text>
+                </View>
+              ))}
+            </View>
+            <View style={styles.resultCard}>
+              <Text style={styles.resultTitle}>{t.shopping.extras}</Text>
+              {t.shopping.extrasList.map((x, i) => (
+                <View key={i} style={styles.extraRow}>
+                  <Icon name="checkmark-circle" size={16} color={COLORS.brand} />
+                  <Text style={styles.extraText}>{x}</Text>
+                </View>
+              ))}
+            </View>
+            <Pressable style={styles.primaryBtn} onPress={doCopy} testID="copy-shopping">
+              <Icon name={copied ? 'checkmark' : 'copy'} size={16} color="#fff" />
+              <Text style={styles.primaryBtnText}>{copied ? t.shopping.copied : t.shopping.copy}</Text>
+            </Pressable>
+          </>
+        )}
+      </ScrollView>
+    </View>
+  );
+}
+
+// --- LEFTOVER GUIDE ---
+function LeftoverTool({ onClose }: any) {
+  const { t } = useT();
+  return (
+    <View style={styles.modalRoot}>
+      <ModalHeader title={t.leftover.title} onClose={onClose} />
+      <ScrollView contentContainerStyle={styles.modalBody}>
+        <Text style={{ fontSize: 13, color: COLORS.muted, marginBottom: SPACING.sm }}>{t.leftover.subtitle}</Text>
+        {t.leftover.tips.map((tip, i) => (
+          <View key={i} style={styles.ruleCard}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.ruleTitle}>{tip.title}</Text>
+              <Text style={styles.ruleBody}>{tip.body}</Text>
+            </View>
+          </View>
+        ))}
+      </ScrollView>
+    </View>
+  );
+}
+
 // --- SCHOOL ---
 function SchoolTool({ onClose }: any) {
   const { t } = useT();
@@ -387,4 +497,6 @@ const styles = StyleSheet.create({
   ruleCard: { flexDirection: 'row', gap: SPACING.md, backgroundColor: COLORS.surfaceSecondary, padding: SPACING.lg, borderRadius: RADIUS.lg, borderWidth: 1, borderColor: COLORS.border },
   ruleTitle: { fontSize: 15, fontWeight: '800', color: COLORS.onSurface, marginBottom: 4 },
   ruleBody: { fontSize: 14, color: COLORS.onSurfaceTertiary, lineHeight: 20 },
+  extraRow: { flexDirection: 'row', gap: SPACING.sm, alignItems: 'center', paddingVertical: 6 },
+  extraText: { color: COLORS.onSurface, fontSize: 14 },
 });

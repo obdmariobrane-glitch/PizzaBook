@@ -15,6 +15,7 @@ type Post = {
   post_id: string; user_id: string; author_name: string; author_picture?: string;
   caption: string; image_path?: string; image_url?: string;
   recipe?: any; likes: string[]; likes_count: number; comments_count: number;
+  rating?: number | null;
   created_at: string;
 };
 
@@ -24,13 +25,18 @@ export default function Feed() {
   const { t } = useT();
   const { user } = useAuth();
   const [posts, setPosts] = useState<Post[]>([]);
+  const [featured, setFeatured] = useState<Post | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
   const load = useCallback(async () => {
     try {
-      const data = await api('/api/posts');
+      const [data, feat] = await Promise.all([
+        api('/api/posts'),
+        api('/api/posts/featured').catch(() => null),
+      ]);
       setPosts(data);
+      setFeatured(feat);
     } catch (e) {
       // ignore
     } finally {
@@ -84,6 +90,14 @@ export default function Feed() {
         ) : null}
         <View style={styles.body}>
           <Text style={styles.caption} numberOfLines={3}>{item.caption}</Text>
+          {item.rating ? (
+            <View style={styles.ratingRow}>
+              {[1,2,3,4,5].map(n => (
+                <Icon key={n} name={n <= (item.rating as number) ? 'star' : 'star-outline'} size={14} color={COLORS.brand} />
+              ))}
+              <Text style={styles.ratingText}>{t.feed.rating}</Text>
+            </View>
+          ) : null}
           <View style={styles.actions}>
             <Pressable testID={`like-btn-${item.post_id}`} onPress={() => onLike(item)} style={styles.action}>
               <Icon name={liked ? 'flame' : 'flame-outline'} size={20} color={liked ? COLORS.brand : COLORS.muted} />
@@ -127,6 +141,30 @@ export default function Feed() {
           data={posts}
           keyExtractor={(p) => p.post_id}
           renderItem={renderItem}
+          ListHeaderComponent={featured ? (
+            <Pressable
+              testID="featured-post"
+              onPress={() => router.push(`/post/${featured.post_id}`)}
+              style={styles.featured}
+            >
+              {featured.image_url ? (
+                <Image source={{ uri: fileUrl(featured.image_url) }} style={styles.featuredImage} contentFit="cover" />
+              ) : null}
+              <LinearGradient colors={['transparent', 'rgba(28,25,23,0.95)']} style={styles.featuredScrim} />
+              <View style={styles.featuredBadge}>
+                <Icon name="trophy" size={12} color="#fff" />
+                <Text style={styles.featuredBadgeText}>{t.feed.featured}</Text>
+              </View>
+              <View style={styles.featuredBody}>
+                <Text style={styles.featuredName}>{featured.author_name}</Text>
+                <Text style={styles.featuredCaption} numberOfLines={2}>{featured.caption}</Text>
+                <View style={styles.featuredMeta}>
+                  <Icon name="flame" size={14} color="#fff" />
+                  <Text style={styles.featuredMetaText}>{featured.likes_count}</Text>
+                </View>
+              </View>
+            </Pressable>
+          ) : null}
           contentContainerStyle={{ padding: SPACING.lg, paddingBottom: SPACING.xxxl, gap: SPACING.lg }}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={COLORS.brand} />}
         />
@@ -161,4 +199,16 @@ const styles = StyleSheet.create({
   actions: { flexDirection: 'row', gap: SPACING.xl, marginTop: SPACING.xs },
   action: { flexDirection: 'row', gap: 6, alignItems: 'center' },
   actionText: { color: COLORS.muted, fontSize: 14, fontWeight: '600' },
+  ratingRow: { flexDirection: 'row', gap: 4, alignItems: 'center', marginTop: 6 },
+  ratingText: { color: COLORS.muted, fontSize: 12, marginLeft: 4 },
+  featured: { borderRadius: RADIUS.lg, overflow: 'hidden', backgroundColor: COLORS.surfaceInverse, aspectRatio: 16 / 10, marginBottom: SPACING.sm, position: 'relative' },
+  featuredImage: { ...StyleSheet.absoluteFillObject as any, width: '100%', height: '100%' },
+  featuredScrim: { position: 'absolute', left: 0, right: 0, bottom: 0, height: '65%' },
+  featuredBadge: { position: 'absolute', top: SPACING.md, left: SPACING.md, backgroundColor: COLORS.brand, paddingHorizontal: SPACING.md, paddingVertical: 6, borderRadius: RADIUS.pill, flexDirection: 'row', gap: 4, alignItems: 'center' },
+  featuredBadgeText: { color: '#fff', fontSize: 11, fontWeight: '800', letterSpacing: 0.5, textTransform: 'uppercase' },
+  featuredBody: { position: 'absolute', left: SPACING.lg, right: SPACING.lg, bottom: SPACING.lg, gap: 4 },
+  featuredName: { color: '#fff', fontSize: 13, fontWeight: '700', opacity: 0.85 },
+  featuredCaption: { color: '#fff', fontSize: 17, fontWeight: '800', lineHeight: 22 },
+  featuredMeta: { flexDirection: 'row', gap: 4, alignItems: 'center', marginTop: 4 },
+  featuredMetaText: { color: '#fff', fontSize: 13, fontWeight: '700' },
 });

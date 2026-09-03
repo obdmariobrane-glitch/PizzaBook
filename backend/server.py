@@ -99,9 +99,13 @@ class PostCreate(BaseModel):
     caption: str
     image_path: Optional[str] = ""
     recipe: Optional[RecipeAttachment] = None
+    rating: Optional[int] = None  # 1-5 self-rating
 
 class CommentCreate(BaseModel):
     text: str
+
+class RatingUpdate(BaseModel):
+    rating: int  # 1-5
 
 class RegisterPushBody(BaseModel):
     user_id: str
@@ -247,6 +251,7 @@ async def create_post(body: PostCreate, user: dict = Depends(get_current_user)):
         "caption": body.caption,
         "image_path": body.image_path or "",
         "recipe": body.recipe.dict() if body.recipe else None,
+        "rating": body.rating if body.rating and 1 <= body.rating <= 5 else None,
         "likes": [],
         "likes_count": 0,
         "comments_count": 0,
@@ -267,6 +272,25 @@ async def list_posts(skip: int = 0, limit: int = 20):
             p["image_url"] = f"/api/files/{p['image_path']}?token={t}"
     return posts
 
+@api_router.get("/posts/featured")
+async def featured_post():
+    """Recipe of the week: top-liked post from past 7 days, must have an image."""
+    week_ago = datetime.now(timezone.utc) - timedelta(days=7)
+    cursor = db.posts.find(
+        {"created_at": {"$gte": week_ago}, "image_path": {"$ne": ""}},
+        {"_id": 0}
+    ).sort([("likes_count", -1), ("created_at", -1)]).limit(1)
+    posts = await cursor.to_list(length=1)
+    if not posts:
+        return None
+    p = posts[0]
+    if p.get("likes_count", 0) < 1:
+        return None
+    if p.get("image_path"):
+        t = await create_read_token(p["image_path"])
+        p["image_url"] = f"/api/files/{p['image_path']}?token={t}"
+    return p
+
 @api_router.get("/posts/{post_id}")
 async def get_post(post_id: str):
     post = await db.posts.find_one({"post_id": post_id}, {"_id": 0})
@@ -276,6 +300,18 @@ async def get_post(post_id: str):
         t = await create_read_token(post["image_path"])
         post["image_url"] = f"/api/files/{post['image_path']}?token={t}"
     return post
+
+@api_router.post("/posts/{post_id}/rating")
+async def set_rating(post_id: str, body: RatingUpdate, user: dict = Depends(get_current_user)):
+    post = await db.posts.find_one({"post_id": post_id}, {"_id": 0})
+    if not post:
+        raise HTTPException(404, "Not found")
+    if post["user_id"] != user["user_id"]:
+        raise HTTPException(403, "Only the author can rate their pizza")
+    if body.rating < 1 or body.rating > 5:
+        raise HTTPException(400, "Rating must be 1-5")
+    await db.posts.update_one({"post_id": post_id}, {"$set": {"rating": body.rating}})
+    return {"rating": body.rating}
 
 @api_router.post("/posts/{post_id}/like")
 async def toggle_like(post_id: str, user: dict = Depends(get_current_user)):

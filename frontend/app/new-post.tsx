@@ -25,6 +25,7 @@ export default function NewPost() {
   const [recipe, setRecipe] = useState<any>(null);
   const [posting, setPosting] = useState(false);
   const [attachRecipe, setAttachRecipe] = useState(false);
+  const [rating, setRating] = useState(0);
 
   useEffect(() => {
     AsyncStorage.getItem('lastRecipe').then((v) => {
@@ -79,6 +80,7 @@ export default function NewPost() {
         body: JSON.stringify({
           caption: caption.trim(),
           image_path: uploadedPath || '',
+          rating: rating > 0 ? rating : null,
           recipe: attachRecipe && recipe ? {
             diameter_cm: recipe.diameter,
             hydration: recipe.hydration,
@@ -157,6 +159,17 @@ export default function NewPost() {
             </View>
           </Pressable>
         ) : null}
+
+        <View style={styles.ratingWrap}>
+          <Text style={styles.label}>{t.feed.rateYourPizza}</Text>
+          <View style={styles.stars}>
+            {[1, 2, 3, 4, 5].map((n) => (
+              <Pressable key={n} testID={`star-${n}`} onPress={() => setRating(rating === n ? 0 : n)} style={styles.starBtn}>
+                <Icon name={n <= rating ? 'star' : 'star-outline'} size={32} color={n <= rating ? COLORS.brand : COLORS.muted} />
+              </Pressable>
+            ))}
+          </View>
+        </View>
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -179,4 +192,7 @@ const styles = StyleSheet.create({
   recipeActive: { borderColor: COLORS.brand, backgroundColor: COLORS.brandTertiary },
   recipeTitle: { fontSize: 14, fontWeight: '700', color: COLORS.onSurface },
   recipeMeta: { fontSize: 12, color: COLORS.muted, marginTop: 2 },
+  ratingWrap: { gap: SPACING.sm },
+  stars: { flexDirection: 'row', gap: SPACING.sm, alignSelf: 'flex-start' },
+  starBtn: { padding: 4 },
 });

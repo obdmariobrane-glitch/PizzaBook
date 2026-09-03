@@ -3,15 +3,16 @@
 ## Concept
 Comprehensive mobile app for home pizza makers - a calculator, planner, and open "Facebook for pizza" community. Prevents overproofing, adapts to home ovens, and lets users share and learn together.
 
-## Features (MVP - all implemented)
+## Features (MVP + v2 - all implemented)
 
 ### 1. Open Community ("Facebook for pizza")
 - Global feed (no friend requests, all posts public)
 - Google OAuth login (Emergent managed)
 - Profile: name, avatar, bio, home equipment list
-- Post pizza photo + caption + attach recipe from calculator
+- Post pizza photo + caption + attach recipe from calculator + self-rating (1-5 stars)
 - Reactions (🔥 like) + comments
 - Push notification to post author on new comment
+- **Recipe of the week**: featured top-liked post from last 7 days at top of feed
 
 ### 2. Dimensions Calculator
 - Diameter (cm) + pizza count → dough ball weight, sauce grams, cheese grams
@@ -44,7 +45,13 @@ Comprehensive mobile app for home pizza makers - a calculator, planner, and open
 ### 7. Pizza School (Golden Rules)
 - Cheese, tomato sauce, ingredient order, golden baking rule
 
-### 8. Multi-language
+### 8. Shopping List
+- Generates a copyable shopping list from last calculator recipe (flour, water, salt, yeast, oil) + recommended extras (mozzarella, San Marzano, olive oil, basil)
+
+### 9. Leftover Dough Guide
+- Freezing dough balls, Panuozzo sandwich, next-day focaccia, mini pizzelle, overnight bread
+
+### 10. Multi-language
 - Full HR / EN / DE support via LanguageProvider + AsyncStorage
 
 ## Stack
@@ -62,6 +69,8 @@ Comprehensive mobile app for home pizza makers - a calculator, planner, and open
 - `GET/POST /api/posts` — list/create post
 - `GET /api/posts/{id}` — post detail
 - `POST /api/posts/{id}/like` — toggle like
+- `POST /api/posts/{id}/rating` — set self-rating (1-5, author only)
+- `GET /api/posts/featured` — top-liked post from last 7 days (recipe of the week)
 - `GET/POST /api/posts/{id}/comments`
 - `POST /api/register-push` — device token registration
 
