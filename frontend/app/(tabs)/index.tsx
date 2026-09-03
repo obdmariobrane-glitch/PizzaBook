@@ -40,7 +40,7 @@ export default function CalculatorHome() {
   }), [pizzas, dims.doughBall, hydration, method, roomTemp]);
   const baking = useMemo(() => bakingCalc(oven), [oven]);
   const iceNeeded = roomTemp >= 26;
-  const ice = useMemo(() => iceNeeded ? iceCalc(dough.water, roomTemp, 4) : null, [iceNeeded, dough.water, roomTemp]);
+  const ice = useMemo(() => iceNeeded ? iceCalc(dough.total.water, roomTemp, 4) : null, [iceNeeded, dough.total.water, roomTemp]);
 
   const setPizzasSafe = (n: number) => {
     if (n < 1 || n > 20) return;
@@ -57,8 +57,9 @@ export default function CalculatorHome() {
   const saveRecipe = async () => {
     const recipe = {
       pizzas, diameter, hydration, method, flourType: '00',
-      ballWeight: dims.doughBall, flour: dough.flour, water: dough.water,
-      salt: dough.salt, oil: dough.oil, yeast: dough.yeast,
+      ballWeight: dims.doughBall,
+      flour: dough.total.flour, water: dough.total.water,
+      salt: dough.total.salt, oil: dough.total.oil, yeast: dough.total.yeast,
     };
     await AsyncStorage.setItem('lastRecipe', JSON.stringify(recipe));
   };
@@ -88,7 +89,7 @@ export default function CalculatorHome() {
 
       <ScrollView contentContainerStyle={{ padding: SPACING.lg, paddingBottom: SPACING.xxxl * 2, gap: SPACING.lg }}>
 
-        {/* 1. Dimensions */}
+        {/* 1. Veličina pizze */}
         <View style={styles.card}>
           <Text style={styles.cardTitle}>{t.calc.dimensions}</Text>
 
@@ -188,66 +189,13 @@ export default function CalculatorHome() {
         <View style={styles.card}>
           <Text style={styles.cardTitle}>{t.calc.baking}</Text>
           <View style={styles.ovenRow}>
-            <OvenCard active={oven === 'homeStone'} onPress={() => setOven('homeStone')} icon="flame" title={t.calc.homeStone} testID="oven-homeStone" />
-            <OvenCard active={oven === 'ooni'} onPress={() => setOven('ooni')} icon="pizza" title={t.calc.ooni} testID="oven-ooni" />
-            <OvenCard active={oven === 'homePan'} onPress={() => setOven('homePan')} icon="restaurant" title={t.calc.homePan} testID="oven-homePan" />
+            <OvenCard active={oven === 'homeStone'} onPress={() => setOven('homeStone')} emoji="🧱" title={t.calc.homeStone} testID="oven-homeStone" />
+            <OvenCard active={oven === 'ooni'} onPress={() => setOven('ooni')} emoji="🍕" title={t.calc.ooni} testID="oven-ooni" />
+            <OvenCard active={oven === 'homePan'} onPress={() => setOven('homePan')} emoji="🥘" title={t.calc.homePan} testID="oven-homePan" />
           </View>
         </View>
 
-        {/* 4. Recipe result (realtime) */}
-        <View style={styles.recipeCard}>
-          <Text style={styles.recipeSection}>Za 1 pizzu · {diameter} cm</Text>
-          <ResultRow label={t.calc.doughBall} value={`${dims.doughBall} g`} />
-          <ResultRow label={t.calc.sauce} value={`${dims.sauce} g`} />
-          <ResultRow label={t.calc.cheese} value={`${dims.cheese} g`} />
-
-          <Text style={[styles.recipeSection, { marginTop: SPACING.md }]}>
-            Ukupno · {pizzas} × {dims.doughBall}g = {dims.totalDough}g
-          </Text>
-          <ResultRow label="Brašno (00 / Tipo 0)" value={`${dough.flour} g`} highlight />
-          {ice ? (
-            <>
-              <ResultRow label={t.calc.coldWater} value={`${ice.water} g`} />
-              <ResultRow label={`🧊 ${t.calc.iceAmount}`} value={`${ice.ice} g`} highlight />
-            </>
-          ) : (
-            <ResultRow label={`${t.calc.totalWater} (${dough.waterTemp}°C)`} value={`${dough.water} g`} highlight />
-          )}
-          <ResultRow label={t.calc.saltAmount} value={`${dough.salt} g`} />
-          <ResultRow label={t.calc.yeastAmount + ' (svježi)'} value={`${dough.yeast} g`} />
-          <ResultRow label={t.calc.oilAmount} value={`${dough.oil} g`} />
-
-          {dough.biga ? (
-            <View style={styles.subBlock}>
-              <Text style={styles.subhead}>Biga (16-18h prije)</Text>
-              <ResultRow label={t.calc.totalFlour} value={`${dough.biga.flour} g`} />
-              <ResultRow label={t.calc.totalWater} value={`${dough.biga.water} g`} />
-              <ResultRow label={t.calc.yeastAmount} value={`${dough.biga.yeast} g`} />
-            </View>
-          ) : null}
-          {dough.poolish ? (
-            <View style={styles.subBlock}>
-              <Text style={styles.subhead}>Poolish (12-14h prije)</Text>
-              <ResultRow label={t.calc.totalFlour} value={`${dough.poolish.flour} g`} />
-              <ResultRow label={t.calc.totalWater} value={`${dough.poolish.water} g`} />
-              <ResultRow label={t.calc.yeastAmount} value={`${dough.poolish.yeast} g`} />
-            </View>
-          ) : null}
-
-          <View style={styles.bakeInfo}>
-            <Icon name="flame" size={16} color={COLORS.brand} />
-            <Text style={styles.bakeText}>{baking.temp} · {baking.time}</Text>
-          </View>
-
-          {hydration > 70 ? (
-            <View style={styles.warnBox}>
-              <Icon name="alert-circle" size={14} color={COLORS.warning} />
-              <Text style={styles.warnText}>{t.calc.hydrationWarning}</Text>
-            </View>
-          ) : null}
-        </View>
-
-        {/* 5. Actions */}
+        {/* Actions above recipe (mirroring apps that lead with intent) */}
         <View style={styles.actionsRow}>
           <Pressable testID="add-shopping" style={[styles.actionBtn, { backgroundColor: COLORS.surfaceSecondary, borderWidth: 1, borderColor: COLORS.border }]} onPress={onShopping}>
             <Icon name="cart" size={18} color={COLORS.brand} />
@@ -263,6 +211,81 @@ export default function CalculatorHome() {
         <View style={styles.moreRow}>
           <MoreLink icon="book" label={t.calc.school} onPress={() => setMoreTool('school')} testID="more-school" />
           <MoreLink icon="restaurant-outline" label={t.calc.leftover} onPress={() => setMoreTool('leftover')} testID="more-leftover" />
+        </View>
+
+        {/* 4. Recipe result (realtime) - AT BOTTOM */}
+        <View style={styles.recipeCard}>
+          <Text style={styles.recipeSection}>Za 1 pizzu · {diameter} cm</Text>
+          <ResultRow label={t.calc.doughBall} value={`${dims.doughBall} g`} />
+          <ResultRow label={t.calc.sauce} value={`${dims.sauce} g`} />
+          <ResultRow label={t.calc.cheese} value={`${dims.cheese} g`} />
+
+          {dough.preferment ? (
+            <>
+              <Text style={[styles.recipeSection, { marginTop: SPACING.md }]}>
+                {t.calc.preferment} · {method === 'biga' ? 'Biga' : 'Poolish'}
+              </Text>
+              <ResultRow label={t.calc.totalFlour} value={`${dough.preferment.flour} g`} highlight />
+              <ResultRow label={t.calc.totalWater} value={`${dough.preferment.water} g`} highlight />
+              <ResultRow label={t.calc.yeastAmount + ' (svježi)'} value={`${dough.preferment.yeast} g`} />
+              <Text style={styles.hint}>
+                {method === 'biga' ? '16-18h fermentacija na 18-20°C prije glavnog zamjesa' : '12-14h fermentacija na 18-20°C prije glavnog zamjesa'}
+              </Text>
+
+              <Text style={[styles.recipeSection, { marginTop: SPACING.md }]}>{t.calc.mainDough}</Text>
+              <ResultRow label={t.calc.remainingFlour} value={`${dough.main.flour} g`} highlight />
+              {ice ? (
+                <>
+                  <ResultRow label={t.calc.coldWater + ' (preostala)'} value={`${Math.max(0, dough.main.water - ice.ice)} g`} />
+                  <ResultRow label={`🧊 ${t.calc.iceAmount}`} value={`${ice.ice} g`} highlight />
+                </>
+              ) : (
+                <ResultRow label={`${t.calc.remainingWater} (${dough.waterTemp}°C)`} value={`${dough.main.water} g`} highlight />
+              )}
+              <ResultRow label={t.calc.saltAmount} value={`${dough.main.salt} g`} />
+              <ResultRow label={t.calc.oilAmount} value={`${dough.main.oil} g`} />
+            </>
+          ) : (
+            <>
+              <Text style={[styles.recipeSection, { marginTop: SPACING.md }]}>
+                Ukupno tijesto · {pizzas} × {dims.doughBall}g = {dough.totalDough}g
+              </Text>
+              <ResultRow label="Brašno (00 / Tipo 0)" value={`${dough.main.flour} g`} highlight />
+              {ice ? (
+                <>
+                  <ResultRow label={t.calc.coldWater} value={`${ice.water} g`} />
+                  <ResultRow label={`🧊 ${t.calc.iceAmount}`} value={`${ice.ice} g`} highlight />
+                </>
+              ) : (
+                <ResultRow label={`${t.calc.totalWater} (${dough.waterTemp}°C)`} value={`${dough.main.water} g`} highlight />
+              )}
+              <ResultRow label={t.calc.saltAmount} value={`${dough.main.salt} g`} />
+              <ResultRow label={t.calc.yeastAmount + ' (svježi)'} value={`${dough.main.yeast} g`} />
+              <ResultRow label={t.calc.oilAmount} value={`${dough.main.oil} g`} />
+            </>
+          )}
+
+          {dough.preferment ? (
+            <View style={styles.subBlock}>
+              <Text style={styles.subhead}>{t.calc.totals} · {pizzas} × {dims.doughBall}g = {dough.totalDough}g</Text>
+              <ResultRow label={t.calc.totalFlour} value={`${dough.total.flour} g`} />
+              <ResultRow label={t.calc.totalWater} value={`${dough.total.water} g`} />
+              <ResultRow label={t.calc.saltAmount} value={`${dough.total.salt} g`} />
+              <ResultRow label={t.calc.yeastAmount} value={`${dough.total.yeast} g`} />
+            </View>
+          ) : null}
+
+          <View style={styles.bakeInfo}>
+            <Icon name="flame" size={16} color={COLORS.brand} />
+            <Text style={styles.bakeText}>{baking.temp} · {baking.time}</Text>
+          </View>
+
+          {hydration > 70 ? (
+            <View style={styles.warnBox}>
+              <Icon name="alert-circle" size={14} color={COLORS.warning} />
+              <Text style={styles.warnText}>{t.calc.hydrationWarning}</Text>
+            </View>
+          ) : null}
         </View>
 
       </ScrollView>
@@ -286,10 +309,10 @@ function ResultRow({ label, value, highlight }: { label: string; value: string; 
   );
 }
 
-function OvenCard({ active, onPress, icon, title, testID }: any) {
+function OvenCard({ active, onPress, emoji, title, testID }: any) {
   return (
     <Pressable testID={testID} onPress={onPress} style={[styles.ovenCard, active && styles.ovenCardActive]}>
-      <Icon name={icon} size={26} color={active ? '#fff' : COLORS.brand} />
+      <Text style={styles.ovenEmoji}>{emoji}</Text>
       <Text style={[styles.ovenText, active && { color: '#fff' }]} numberOfLines={2}>{title}</Text>
     </Pressable>
   );
@@ -460,6 +483,7 @@ const styles = StyleSheet.create({
   ovenRow: { flexDirection: 'row', gap: SPACING.sm },
   ovenCard: { flex: 1, paddingVertical: SPACING.md, paddingHorizontal: SPACING.sm, borderRadius: RADIUS.md, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border, alignItems: 'center', gap: 6, minHeight: 88 },
   ovenCardActive: { backgroundColor: COLORS.brand, borderColor: COLORS.brand },
+  ovenEmoji: { fontSize: 30 },
   ovenText: { color: COLORS.onSurface, fontSize: 11, fontWeight: '700', textAlign: 'center' },
 
   recipeCard: { backgroundColor: COLORS.surfaceSecondary, padding: SPACING.lg, borderRadius: RADIUS.lg, borderWidth: 1, borderColor: COLORS.border, gap: 4 },
@@ -469,6 +493,7 @@ const styles = StyleSheet.create({
   resValue: { color: COLORS.onSurface, fontSize: 15, fontWeight: '700' },
   subBlock: { marginTop: SPACING.md, gap: 4, paddingTop: SPACING.sm, borderTopWidth: 2, borderTopColor: COLORS.brand },
   subhead: { fontSize: 12, color: COLORS.brand, fontWeight: '800', textTransform: 'uppercase', marginBottom: 4 },
+  hint: { fontSize: 12, color: COLORS.muted, fontStyle: 'italic', marginTop: 4, marginBottom: 4 },
   bakeInfo: { flexDirection: 'row', gap: SPACING.sm, alignItems: 'center', marginTop: SPACING.md, paddingTop: SPACING.md, borderTopWidth: 1, borderTopColor: COLORS.divider },
   bakeText: { fontSize: 14, color: COLORS.onSurface, fontWeight: '700' },
   warnBox: { flexDirection: 'row', gap: SPACING.sm, alignItems: 'flex-start', backgroundColor: '#FEF3C7', padding: SPACING.md, borderRadius: RADIUS.md, marginTop: SPACING.md },

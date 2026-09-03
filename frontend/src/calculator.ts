@@ -31,59 +31,72 @@ export function doughCalc(opts: {
   const salt = flour * (opts.saltPct / 100);
   const oil = flour * (opts.oilPct / 100);
 
-  // Yeast %:
-  //  sameDay: 0.3% fresh; coldLong: 0.1% fresh
-  //  Warmer room -> less yeast (fermentation faster)
+  // Direct-method yeast %:
   let yeastFreshPct = opts.fermentation === 'sameDay' ? 0.3 : 0.1;
   if (opts.roomTemp > 24) yeastFreshPct *= 0.7;
   if (opts.roomTemp < 18) yeastFreshPct *= 1.4;
-  let yeastAmount = flour * (yeastFreshPct / 100);
-  if (opts.yeastType === 'dry') yeastAmount /= 3;
+  let directYeast = flour * (yeastFreshPct / 100);
+  if (opts.yeastType === 'dry') directYeast /= 3;
 
-  // biga/poolish adjust yeast: biga 1% of biga flour, poolish 0.1% of poolish flour
-  let bigaBlock: any = null;
-  let poolishBlock: any = null;
-  if (opts.method === 'biga') {
-    // 50% of flour, 45% hydration, 1% yeast
-    const bigaFlour = flour * 0.5;
-    const bigaWater = bigaFlour * 0.45;
-    const bigaYeast = bigaFlour * 0.01;
-    bigaBlock = { flour: bigaFlour, water: bigaWater, yeast: bigaYeast };
-  } else if (opts.method === 'poolish') {
-    // 35% of flour, 100% hydration, 0.1% yeast
-    const pFlour = flour * 0.35;
-    const pWater = pFlour * 1.0;
-    const pYeast = pFlour * 0.001;
-    poolishBlock = { flour: pFlour, water: pWater, yeast: pYeast };
-  }
-
-  // water temp - rule 55/60: desired dough temp ~24C
-  //   hand: sum 55 (water + room = 55)
-  //   home mixer: 55 (moderate friction)
-  //   spiral: 60 - friction (spiral gives more heat -> colder water)
-  const rule = opts.mixing === 'spiral' ? 55 : (opts.mixing === 'home' ? 60 : 60);
+  // Water temp - rule 55/60
+  const rule = opts.mixing === 'spiral' ? 55 : 60;
   let waterTemp = rule - opts.roomTemp;
   if (opts.fermentation === 'coldLong') waterTemp = Math.min(waterTemp, 10);
   waterTemp = Math.max(2, Math.min(30, waterTemp));
 
+  const R = (n: number, d = 0) => {
+    const f = Math.pow(10, d);
+    return Math.round(n * f) / f;
+  };
+
+  if (opts.method === 'biga') {
+    // Biga: 50% flour, 45% hydration, 1% yeast
+    const bigaFlour = flour * 0.5;
+    const bigaWater = bigaFlour * 0.45;
+    let bigaYeast = bigaFlour * 0.01;
+    if (opts.yeastType === 'dry') bigaYeast /= 3;
+
+    const mainFlour = flour - bigaFlour;
+    const mainWater = water - bigaWater;
+
+    return {
+      method: 'biga' as const,
+      preferment: { flour: R(bigaFlour), water: R(bigaWater), yeast: R(bigaYeast, 2) },
+      main: { flour: R(mainFlour), water: R(mainWater), salt: R(salt, 1), oil: R(oil, 1), yeast: 0 },
+      total: { flour: R(flour), water: R(water), salt: R(salt, 1), oil: R(oil, 1), yeast: R(bigaYeast, 2) },
+      totalDough: R(totalDough),
+      waterTemp: R(waterTemp),
+    };
+  }
+
+  if (opts.method === 'poolish') {
+    // Poolish: 35% flour, 100% hydration, 0.1% yeast
+    const pFlour = flour * 0.35;
+    const pWater = pFlour * 1.0;
+    let pYeast = pFlour * 0.001;
+    if (opts.yeastType === 'dry') pYeast /= 3;
+
+    const mainFlour = flour - pFlour;
+    const mainWater = water - pWater;
+
+    return {
+      method: 'poolish' as const,
+      preferment: { flour: R(pFlour), water: R(pWater), yeast: R(pYeast, 2) },
+      main: { flour: R(mainFlour), water: R(mainWater), salt: R(salt, 1), oil: R(oil, 1), yeast: 0 },
+      total: { flour: R(flour), water: R(water), salt: R(salt, 1), oil: R(oil, 1), yeast: R(pYeast, 2) },
+      totalDough: R(totalDough),
+      waterTemp: R(waterTemp),
+    };
+  }
+
+  // Direct
   return {
-    flour: Math.round(flour),
-    water: Math.round(water),
-    salt: Math.round(salt * 10) / 10,
-    oil: Math.round(oil * 10) / 10,
-    yeast: Math.round(yeastAmount * 100) / 100,
-    waterTemp: Math.round(waterTemp),
-    totalDough: Math.round(totalDough),
-    biga: bigaBlock ? {
-      flour: Math.round(bigaBlock.flour),
-      water: Math.round(bigaBlock.water),
-      yeast: Math.round(bigaBlock.yeast * 100) / 100,
-    } : null,
-    poolish: poolishBlock ? {
-      flour: Math.round(poolishBlock.flour),
-      water: Math.round(poolishBlock.water),
-      yeast: Math.round(poolishBlock.yeast * 100) / 100,
-    } : null,
+    method: 'direct' as const,
+    preferment: null,
+    main: { flour: R(flour), water: R(water), salt: R(salt, 1), oil: R(oil, 1), yeast: R(directYeast, 2) },
+    total: { flour: R(flour), water: R(water), salt: R(salt, 1), oil: R(oil, 1), yeast: R(directYeast, 2) },
+    totalDough: R(totalDough),
+    waterTemp: R(waterTemp),
   };
 }
 
