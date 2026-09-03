@@ -1,0 +1,165 @@
+{
+  "app_name": "Pizzabook",
+  "personality": "1 iOS-Native Clean",
+  "personality_one_liner": "A rustic, authentic Italian pizzeria feel delivered through a highly polished, iOS-native utility and community interface.",
+  "color": {
+    "surface": "#FAF5F0",
+    "onSurface": "#1C1917",
+    "surfaceSecondary": "#FFFFFF",
+    "onSurfaceSecondary": "#1C1917",
+    "surfaceTertiary": "#F3EBE1",
+    "onSurfaceTertiary": "#44403C",
+    "surfaceInverse": "#292524",
+    "onSurfaceInverse": "#FAF5F0",
+    "brand": "#D15900",
+    "brandPrimary": "#D15900",
+    "onBrandPrimary": "#FFFFFF",
+    "brandSecondary": "#E87121",
+    "onBrandSecondary": "#FFFFFF",
+    "brandTertiary": "#FADBC8",
+    "onBrandTertiary": "#8C3A00",
+    "success": "#2D6A4F",
+    "onSuccess": "#FFFFFF",
+    "warning": "#E07A5F",
+    "onWarning": "#FFFFFF",
+    "error": "#9B2226",
+    "onError": "#FFFFFF",
+    "info": "#44403C",
+    "onInfo": "#FFFFFF",
+    "border": "#E6DED5",
+    "borderStrong": "#C2B2A2",
+    "divider": "#E6DED5"
+  },
+  "typography": {
+    "displayFontFamily": "Geist",
+    "textFontFamily": "Geist",
+    "scale": {
+      "sm": 12,
+      "base": 14,
+      "lg": 16,
+      "xl": 20,
+      "2xl": 24
+    }
+  },
+  "spacing": {
+    "rule": "Generous iOS-native rhythms. Content must be clearly grouped with comfortable vertical padding.",
+    "xs": 4,
+    "sm": 8,
+    "md": 12,
+    "lg": 16,
+    "xl": 24,
+    "2xl": 32,
+    "3xl": 48
+  },
+  "radius_tokens": {
+    "sm": 6,
+    "md": 12,
+    "lg": 20,
+    "pill": 999
+  },
+  "shadow_tier": 1,
+  "navigation": "bottom_tabs",
+  "icon_set": "Ionicons",
+  "glassmorphism": {
+    "enabled": true,
+    "do's": [
+      "Apply to sticky headers scrolling over feed content.",
+      "Apply to the bottom tab bar.",
+      "Apply to recipe card overlays using a gradient scrim if text overlaps the image."
+    ],
+    "dont's": [
+      "Do not blur form inputs or calculator grid buttons.",
+      "Do not use blur on body text regions."
+    ]
+  },
+  "platform_libraries": {
+    "glass": {
+      "ios": "expo-glass-effect",
+      "android": "expo-blur",
+      "low_end_android_fallback": "solid surfaceSecondary"
+    },
+    "image": "expo-image",
+    "blur": "expo-blur",
+    "bottom_sheet": "@gorhom/bottom-sheet",
+    "animation": "react-native-reanimated",
+    "gesture": "react-native-gesture-handler"
+  },
+  "screens": [
+    {
+      "name": "CommunityFeed",
+      "purpose": "A scrollable wall to discover pizzas and recipes, acting as a 'Facebook for pizza'.",
+      "states": {
+        "loading": "Centered spinner over the sandy surface.",
+        "empty": "Illustration of an empty pizza peel with a prompt to 'Bake your first pizza'.",
+        "error": "Message 'Failed to load the wall' with a Retry button."
+      },
+      "layout": "Vertical scroll feed. Use edge-to-edge full-width image cards for pizza posts, mimicking rich media layouts (Pinterest/Instagram). Overlay recipe title, hydration %, and author via a bottom-heavy gradient scrim. Actions (Like, Comment, Save) below the image or floating on it."
+    },
+    {
+      "name": "CalculatorHub",
+      "purpose": "Multi-tool center for dough formulation, dimensions, and baking times.",
+      "states": {
+        "loading": "Skeleton loaders mimicking the iOS native grid list.",
+        "empty": "Not applicable for the hub menu.",
+        "error": "Error loading calculator configurations."
+      },
+      "layout": "Grid or vertical list of tools (Dimensions, Dough & Fermentation, Home Baking). Inside the calculator, mirror native iOS grid/list components with clear numeric typography (Geist large), 44x44pt touch targets minimum, and bottom-pinned calculation CTA."
+    },
+    {
+      "name": "Planner",
+      "purpose": "Reverse baking timeline planner with alarms.",
+      "states": {
+        "loading": "Centered spinner.",
+        "empty": "Illustration of a clock and dough resting, 'No active schedules'.",
+        "error": "Failed to load timeline."
+      },
+      "layout": "Timeline view using vertical connecting lines. Each step (Mixing, Bulk Ferment, Balling, Proofing, Baking) sits in a surfaceSecondary card. Provide quick 'Start Timer' actions via primary CTA."
+    },
+    {
+      "name": "Profile",
+      "purpose": "Manage user equipment (ovens), saved recipes, and settings.",
+      "states": {
+        "loading": "Centered spinner.",
+        "empty": "Prompt to add oven/equipment.",
+        "error": "Failed to load profile."
+      },
+      "layout": "Standard iOS grouped list layout. A header with avatar (initials fallback if no image) over a blurred wood-fired oven background. Sections for Equipment, Saved Recipes, and App Settings (Multi-language)."
+    }
+  ],
+  "images": {
+    "hero_pizza": {
+      "url": "https://images.pexels.com/photos/27600445/pexels-photo-27600445.jpeg",
+      "alt": "Tasty Neapolitan pizza with melted cheese and sausage toppings"
+    },
+    "dough_making": {
+      "url": "https://images.unsplash.com/photo-1517686469429-8bdb88b9f907?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAzMjV8MHwxfHNlYXJjaHwxfHxwaXp6YSUyMGRvdWdoJTIwbWFraW5nJTIwZmxvdXJ8ZW58MHx8fHwxNzg1MjI3NTc3fDA&ixlib=rb-4.1.0&q=85",
+      "alt": "Hands kneading pizza dough on a floured surface"
+    },
+    "wood_fired_oven": {
+      "url": "https://images.unsplash.com/photo-1579751626657-72bc17010498",
+      "alt": "Pizza baking inside a classic wood-fired oven with visible flames"
+    },
+    "pizza_slice": {
+      "url": "https://images.unsplash.com/photo-1600028068383-ea11a7a101f3",
+      "alt": "Close up of a pizza slice showing a beautiful airy cornicione"
+    }
+  },
+  "haptics": {
+    "button_press": "light",
+    "tab_switch": "selection",
+    "calculator_input": "light",
+    "timer_toggle": "medium",
+    "post_like": "success"
+  },
+  "instructions_to_main_agent": [
+    "Strictly follow the 'iOS-Native Clean' personality with the warm terracotta (#D15900) brand color.",
+    "BANNED: Any shade of blue, purple, or indigo. Stick to warm earth tones, sandy background (#FAF5F0) and terracotta accents.",
+    "Implement the 'Community Feed' with large edge-to-edge media cards. ALWAYS use a top-down vertical gradient scrim (transparent -> 70% surfaceInverse) if text is placed over imagery.",
+    "In the 'CalculatorHub', prioritize usability: forms must have labels above inputs, and buttons should be large enough (44x44pt minimum) with generous padding.",
+    "For the 'Planner', ensure bottom-pinned primary CTAs over scrolling content are implemented, resting on a glass/blurred background container to prevent text clash.",
+    "Include high-contrast Loading/Empty/Error states for all data-fetching screens, occupying `flex: 1`.",
+    "Support dark mode natively by overriding surface to `#1C1917` and surfaceSecondary to `#292524`. Preserve the terracotta (#D15900) brand primary across both modes.",
+    "For Multi-language (HR, EN, DE), establish an internationalization structure early on but keep UI texts hardcoded into a constants object to make later extraction straightforward.",
+    "Incorporate haptics for calculator inputs and standard navigations as specified in the haptics block."
+  ]
+}
