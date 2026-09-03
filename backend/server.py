@@ -262,8 +262,11 @@ async def create_post(body: PostCreate, user: dict = Depends(get_current_user)):
     return doc
 
 @api_router.get("/posts")
-async def list_posts(skip: int = 0, limit: int = 20):
-    cursor = db.posts.find({}, {"_id": 0}).sort("created_at", -1).skip(skip).limit(limit)
+async def list_posts(skip: int = 0, limit: int = 20, method: Optional[str] = None):
+    query = {}
+    if method and method in ("direct", "biga", "poolish"):
+        query["recipe.method"] = method
+    cursor = db.posts.find(query, {"_id": 0}).sort("created_at", -1).skip(skip).limit(limit)
     posts = await cursor.to_list(length=limit)
     # attach signed url
     for p in posts:

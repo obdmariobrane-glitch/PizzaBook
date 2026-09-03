@@ -7,6 +7,7 @@ Comprehensive mobile app for home pizza makers - a calculator, planner, and open
 
 ### 1. Open Community ("Facebook for pizza")
 - Global feed (no friend requests, all posts public)
+- **Method filter chips** at top of feed: All / Direct / Biga / Poolish
 - Google OAuth login (Emergent managed)
 - Profile: name, avatar, bio, home equipment list
 - Post pizza photo + caption + attach recipe from calculator + self-rating (1-5 stars)

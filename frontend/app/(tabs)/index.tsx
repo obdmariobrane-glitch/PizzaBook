@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { View, Text, StyleSheet, FlatList, Pressable, RefreshControl, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, FlatList, Pressable, RefreshControl, ActivityIndicator, ScrollView } from 'react-native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter, useFocusEffect } from 'expo-router';
@@ -28,11 +28,13 @@ export default function Feed() {
   const [featured, setFeatured] = useState<Post | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [filter, setFilter] = useState<'all' | 'direct' | 'biga' | 'poolish'>('all');
 
   const load = useCallback(async () => {
     try {
+      const q = filter === 'all' ? '' : `?method=${filter}`;
       const [data, feat] = await Promise.all([
-        api('/api/posts'),
+        api(`/api/posts${q}`),
         api('/api/posts/featured').catch(() => null),
       ]);
       setPosts(data);
@@ -43,7 +45,7 @@ export default function Feed() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [filter]);
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
@@ -126,6 +128,26 @@ export default function Feed() {
         </Pressable>
       </View>
 
+      <View style={styles.filterRow}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterContent}>
+          {([
+            { k: 'all' as const, label: t.feed.filterAll },
+            { k: 'direct' as const, label: t.calc.direct },
+            { k: 'biga' as const, label: t.calc.biga },
+            { k: 'poolish' as const, label: t.calc.poolish },
+          ]).map((f) => (
+            <Pressable
+              key={f.k}
+              testID={`filter-${f.k}`}
+              onPress={() => setFilter(f.k)}
+              style={[styles.filterChip, filter === f.k && styles.filterChipActive]}
+            >
+              <Text style={[styles.filterChipText, filter === f.k && { color: '#fff' }]}>{f.label}</Text>
+            </Pressable>
+          ))}
+        </ScrollView>
+      </View>
+
       {loading ? (
         <View style={styles.center}><ActivityIndicator color={COLORS.brand} /></View>
       ) : posts.length === 0 ? (
@@ -178,6 +200,11 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: SPACING.lg, paddingVertical: SPACING.md },
   title: { fontSize: 28, fontWeight: '800', color: COLORS.onSurface, letterSpacing: -0.5 },
   newBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: COLORS.brand, alignItems: 'center', justifyContent: 'center' },
+  filterRow: { height: 56, justifyContent: 'center', borderBottomWidth: 1, borderBottomColor: COLORS.divider, backgroundColor: COLORS.surface },
+  filterContent: { paddingHorizontal: SPACING.lg, gap: SPACING.sm, alignItems: 'center' },
+  filterChip: { paddingHorizontal: SPACING.md, height: 36, borderRadius: RADIUS.pill, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.surfaceSecondary, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  filterChipActive: { backgroundColor: COLORS.brand, borderColor: COLORS.brand },
+  filterChipText: { color: COLORS.onSurface, fontSize: 13, fontWeight: '600' },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: SPACING.md, paddingHorizontal: SPACING.xl },
   emptyEmoji: { fontSize: 60 },

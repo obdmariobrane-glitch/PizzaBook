@@ -41,6 +41,7 @@ export const translations = {
       featured: 'Recept tjedna',
       rateYourPizza: 'Ocijeni svoju pizzu',
       rating: 'Ocjena autora',
+      filterAll: 'Sve',
     },
     calc: {
       title: 'Kalkulator',
@@ -232,6 +233,7 @@ export const translations = {
       featured: 'Recipe of the week',
       rateYourPizza: 'Rate your pizza',
       rating: "Author's rating",
+      filterAll: 'All',
     },
     calc: {
       title: 'Calculator',
@@ -392,6 +394,7 @@ export const translations = {
       featured: 'Rezept der Woche',
       rateYourPizza: 'Bewerte deine Pizza',
       rating: 'Bewertung',
+      filterAll: 'Alle',
     },
     calc: {
       title: 'Rechner',
