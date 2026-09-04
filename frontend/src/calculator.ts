@@ -51,72 +51,87 @@ export function dimensionsCalc(diameter: number, pizzas: number) {
 
 export function doughCalc(opts: {
   pizzas: number; ballWeight: number; hydration: number; saltPct: number; oilPct: number;
-  method: Method; yeastType: YeastType; mixing: Mixing;
-  roomTemp: number; fridgeTemp: number; fermentation: Fermentation;
+  method: Method;
+  roomHours: number; roomTemp: number;
+  fridgeHours: number; fridgeTemp: number;
+  yeastType?: YeastType;
+  mixing?: Mixing;
 }) {
+  // === Fermentation math (dynamic yeast) ===
+  // E_RT = roomHours × (1 + 0.08 × (roomTemp - 20))
+  const eRT = Math.max(0, opts.roomHours) * (1 + 0.08 * (opts.roomTemp - 20));
+  // E_CT = fridgeHours × (0.12 × (1 + 0.05 × (fridgeTemp - 4)))
+  const eCT = Math.max(0, opts.fridgeHours) * (0.12 * (1 + 0.05 * (opts.fridgeTemp - 4)));
+  const eTotal = Math.max(0.5, eRT + eCT); // clamp min to avoid explosion
+  // yeastPct = K / E_total (K = factor constant; 0.5 gives ~0.1% fresh yeast for 24h cold ferment @4°C + 2h RT @22°C)
+  const K = 0.5;
+  let yeastPct = K / eTotal;
+  if (opts.yeastType === 'dry') yeastPct /= 3;
+
+  // === Baker's percentages ===
   const totalDough = opts.pizzas * opts.ballWeight;
-  // total dough = flour + water + salt + yeast + oil ≈ flour * (1 + hyd + salt + oil + yeast)
-  const totalFactor = 1 + opts.hydration / 100 + opts.saltPct / 100 + opts.oilPct / 100 + 0.005;
-  const flour = totalDough / totalFactor;
+  const totalPercent = 100 + opts.hydration + opts.saltPct + yeastPct + opts.oilPct;
+  const flour = (totalDough / totalPercent) * 100;
   const water = flour * (opts.hydration / 100);
   const salt = flour * (opts.saltPct / 100);
+  const yeast = flour * (yeastPct / 100);
   const oil = flour * (opts.oilPct / 100);
 
-  // Direct-method yeast %:
-  let yeastFreshPct = opts.fermentation === 'sameDay' ? 0.3 : 0.1;
-  if (opts.roomTemp > 24) yeastFreshPct *= 0.7;
-  if (opts.roomTemp < 18) yeastFreshPct *= 1.4;
-  let directYeast = flour * (yeastFreshPct / 100);
-  if (opts.yeastType === 'dry') directYeast /= 3;
-
-  // Water temp - rule 55/60
+  // Water temp — rule 55/60 (spiral 55, hand/home 60), clamped by cold ferment
   const rule = opts.mixing === 'spiral' ? 55 : 60;
   let waterTemp = rule - opts.roomTemp;
-  if (opts.fermentation === 'coldLong') waterTemp = Math.min(waterTemp, 10);
+  if (opts.fridgeHours >= 12) waterTemp = Math.min(waterTemp, 10);
   waterTemp = Math.max(2, Math.min(30, waterTemp));
 
-  const R = (n: number, d = 0) => {
-    const f = Math.pow(10, d);
-    return Math.round(n * f) / f;
-  };
+  // Rounding helpers per spec
+  const R0 = (n: number) => Math.round(n);
+  const R1 = (n: number) => Math.round(n * 10) / 10;
+  const R2 = (n: number) => Math.round(n * 100) / 100;
+
+  const buildBlock = () => ({
+    flour: R0(flour), water: R0(water),
+    salt: R1(salt), oil: R0(oil), yeast: R2(yeast),
+  });
 
   if (opts.method === 'biga') {
-    // Biga: 50% flour, 45% hydration, 1% yeast
+    // Biga: 50% flour, 45% hydration, 1% fresh yeast (of biga flour)
     const bigaFlour = flour * 0.5;
     const bigaWater = bigaFlour * 0.45;
     let bigaYeast = bigaFlour * 0.01;
     if (opts.yeastType === 'dry') bigaYeast /= 3;
-
-    const mainFlour = flour - bigaFlour;
-    const mainWater = water - bigaWater;
-
     return {
       method: 'biga' as const,
-      preferment: { flour: R(bigaFlour), water: R(bigaWater), yeast: R(bigaYeast, 2) },
-      main: { flour: R(mainFlour), water: R(mainWater), salt: R(salt, 1), oil: R(oil, 1), yeast: 0 },
-      total: { flour: R(flour), water: R(water), salt: R(salt, 1), oil: R(oil, 1), yeast: R(bigaYeast, 2) },
-      totalDough: R(totalDough),
-      waterTemp: R(waterTemp),
+      preferment: { flour: R0(bigaFlour), water: R0(bigaWater), yeast: R2(bigaYeast) },
+      main: {
+        flour: R0(flour - bigaFlour), water: R0(water - bigaWater),
+        salt: R1(salt), oil: R0(oil), yeast: 0,
+      },
+      total: { ...buildBlock(), yeast: R2(bigaYeast) },
+      totalDough: R0(totalDough),
+      waterTemp: R0(waterTemp),
+      yeastPct: R2(yeastPct),
+      eTotal: R1(eTotal),
     };
   }
 
   if (opts.method === 'poolish') {
-    // Poolish: 35% flour, 100% hydration, 0.1% yeast
+    // Poolish: 35% flour, 100% hydration, 0.1% fresh yeast (of poolish flour)
     const pFlour = flour * 0.35;
     const pWater = pFlour * 1.0;
     let pYeast = pFlour * 0.001;
     if (opts.yeastType === 'dry') pYeast /= 3;
-
-    const mainFlour = flour - pFlour;
-    const mainWater = water - pWater;
-
     return {
       method: 'poolish' as const,
-      preferment: { flour: R(pFlour), water: R(pWater), yeast: R(pYeast, 2) },
-      main: { flour: R(mainFlour), water: R(mainWater), salt: R(salt, 1), oil: R(oil, 1), yeast: 0 },
-      total: { flour: R(flour), water: R(water), salt: R(salt, 1), oil: R(oil, 1), yeast: R(pYeast, 2) },
-      totalDough: R(totalDough),
-      waterTemp: R(waterTemp),
+      preferment: { flour: R0(pFlour), water: R0(pWater), yeast: R2(pYeast) },
+      main: {
+        flour: R0(flour - pFlour), water: R0(water - pWater),
+        salt: R1(salt), oil: R0(oil), yeast: 0,
+      },
+      total: { ...buildBlock(), yeast: R2(pYeast) },
+      totalDough: R0(totalDough),
+      waterTemp: R0(waterTemp),
+      yeastPct: R2(yeastPct),
+      eTotal: R1(eTotal),
     };
   }
 
@@ -124,10 +139,12 @@ export function doughCalc(opts: {
   return {
     method: 'direct' as const,
     preferment: null,
-    main: { flour: R(flour), water: R(water), salt: R(salt, 1), oil: R(oil, 1), yeast: R(directYeast, 2) },
-    total: { flour: R(flour), water: R(water), salt: R(salt, 1), oil: R(oil, 1), yeast: R(directYeast, 2) },
-    totalDough: R(totalDough),
-    waterTemp: R(waterTemp),
+    main: buildBlock(),
+    total: buildBlock(),
+    totalDough: R0(totalDough),
+    waterTemp: R0(waterTemp),
+    yeastPct: R2(yeastPct),
+    eTotal: R1(eTotal),
   };
 }
 

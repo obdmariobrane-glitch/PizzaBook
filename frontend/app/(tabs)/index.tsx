@@ -36,23 +36,30 @@ export default function CalculatorHome() {
   const [method, setMethod] = useState<Method>('direct');
   const [hydration, setHydration] = useState(FLOUR_PROFILES.caputo00.ideal);
   const [roomTemp, setRoomTemp] = useState(22);
+  const [roomHours, setRoomHours] = useState(2);
+  const [fridgeTemp, setFridgeTemp] = useState(4);
+  const [fridgeHours, setFridgeHours] = useState(24);
   const [oven, setOven] = useState<OvenType>('homeStone');
   const [mixing, setMixing] = useState<'hand' | 'mixer'>('hand');
   const [showMixSteps, setShowMixSteps] = useState(false);
   const [moreTool, setMoreTool] = useState<null | 'school' | 'leftover' | 'shopping'>(null);
 
+  const SALT_PCT = 2.8;
+  const OIL_PCT = 2;
+
   const flourProfile = FLOUR_PROFILES[flour];
   const isIdealHydration = hydration === flourProfile.ideal;
   const inRange = hydration >= flourProfile.min && hydration <= flourProfile.max;
 
-  // Reactive calculations
+  // Reactive calculations - RE-COMPUTE on any input change
   const dims = useMemo(() => dimensionsCalc(diameter, pizzas), [diameter, pizzas]);
   const dough = useMemo(() => doughCalc({
     pizzas, ballWeight: dims.doughBall, hydration,
-    saltPct: 2.8, oilPct: 2, method,
-    yeastType: 'fresh', mixing: mixing === 'mixer' ? 'spiral' : 'hand',
-    roomTemp, fridgeTemp: 4, fermentation: 'coldLong',
-  }), [pizzas, dims.doughBall, hydration, method, roomTemp, mixing]);
+    saltPct: SALT_PCT, oilPct: OIL_PCT, method,
+    roomHours, roomTemp, fridgeHours, fridgeTemp,
+    mixing: mixing === 'mixer' ? 'spiral' : 'hand',
+    yeastType: 'fresh',
+  }), [pizzas, dims.doughBall, hydration, method, roomHours, roomTemp, fridgeHours, fridgeTemp, mixing]);
   const iceNeeded = roomTemp >= 26;
   const ice = useMemo(() => iceNeeded ? iceCalc(dough.total.water, roomTemp, 4) : null, [iceNeeded, dough.total.water, roomTemp]);
 
@@ -114,24 +121,25 @@ export default function CalculatorHome() {
 
       <ScrollView contentContainerStyle={{ padding: SPACING.lg, paddingBottom: SPACING.xxxl * 2, gap: SPACING.lg }} keyboardShouldPersistTaps="handled">
 
-        {/* 1. FLOUR - compact horizontal chip row */}
+        {/* 1. FLOUR - vertical list, one below another */}
         <View style={styles.card}>
           <Text style={styles.cardTitle}>1 · {t.calc.flourType}</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.flourRowScroll}>
+          <View style={{ gap: SPACING.sm }}>
             {FLOURS.map((f) => {
               const p = FLOUR_PROFILES[f.key];
               const active = flour === f.key;
               return (
-                <Pressable key={f.key} testID={`flour-${f.key}`} onPress={() => changeFlour(f.key)} style={[styles.flourChip, active && styles.flourChipActive]}>
-                  <Text style={styles.flourChipEmoji}>{f.emoji}</Text>
-                  <View>
-                    <Text style={[styles.flourChipLabel, active && { color: '#fff' }]} numberOfLines={1}>{f.label}</Text>
-                    <Text style={[styles.flourChipRange, active && { color: '#fff' }]}>{p.min}–{p.max}% · ◎ {p.ideal}%</Text>
+                <Pressable key={f.key} testID={`flour-${f.key}`} onPress={() => changeFlour(f.key)} style={[styles.flourRow, active && styles.flourRowActive]}>
+                  <Text style={styles.flourRowEmoji}>{f.emoji}</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.flourRowLabel, active && { color: '#fff' }]}>{f.label}</Text>
+                    <Text style={[styles.flourRowRange, active && { color: '#fff' }]}>Idealno {p.ideal}% · raspon {p.min}–{p.max}%</Text>
                   </View>
+                  {active ? <Icon name="checkmark-circle" size={20} color="#fff" /> : null}
                 </Pressable>
               );
             })}
-          </ScrollView>
+          </View>
         </View>
 
         {/* 2. VELIČINA PIZZE */}
@@ -211,6 +219,45 @@ export default function CalculatorHome() {
               </Pressable>
               <Text style={styles.stepVal}>{roomTemp}°C</Text>
               <Pressable testID="rt-plus" onPress={() => step(() => setRoomTemp(Math.min(35, roomTemp + 1)))} style={styles.stepBtn}>
+                <Icon name="add" size={20} color={COLORS.brand} />
+              </Pressable>
+            </View>
+          </View>
+
+          <View style={[styles.row, { marginTop: SPACING.sm }]}>
+            <Text style={styles.label}>Sati na sobnoj temp.</Text>
+            <View style={styles.stepper}>
+              <Pressable testID="rh-minus" onPress={() => step(() => setRoomHours(Math.max(0, roomHours - 1)))} style={styles.stepBtn}>
+                <Icon name="remove" size={20} color={COLORS.brand} />
+              </Pressable>
+              <Text style={styles.stepVal}>{roomHours}h</Text>
+              <Pressable testID="rh-plus" onPress={() => step(() => setRoomHours(Math.min(24, roomHours + 1)))} style={styles.stepBtn}>
+                <Icon name="add" size={20} color={COLORS.brand} />
+              </Pressable>
+            </View>
+          </View>
+
+          <View style={[styles.row, { marginTop: SPACING.sm }]}>
+            <Text style={styles.label}>Sati u hladnjaku</Text>
+            <View style={styles.stepper}>
+              <Pressable testID="fh-minus" onPress={() => step(() => setFridgeHours(Math.max(0, fridgeHours - 2)))} style={styles.stepBtn}>
+                <Icon name="remove" size={20} color={COLORS.brand} />
+              </Pressable>
+              <Text style={styles.stepVal}>{fridgeHours}h</Text>
+              <Pressable testID="fh-plus" onPress={() => step(() => setFridgeHours(Math.min(72, fridgeHours + 2)))} style={styles.stepBtn}>
+                <Icon name="add" size={20} color={COLORS.brand} />
+              </Pressable>
+            </View>
+          </View>
+
+          <View style={[styles.row, { marginTop: SPACING.sm }]}>
+            <Text style={styles.label}>Temp. hladnjaka</Text>
+            <View style={styles.stepper}>
+              <Pressable testID="ft-minus" onPress={() => step(() => setFridgeTemp(Math.max(2, fridgeTemp - 1)))} style={styles.stepBtn}>
+                <Icon name="remove" size={20} color={COLORS.brand} />
+              </Pressable>
+              <Text style={styles.stepVal}>{fridgeTemp}°C</Text>
+              <Pressable testID="ft-plus" onPress={() => step(() => setFridgeTemp(Math.min(10, fridgeTemp + 1)))} style={styles.stepBtn}>
                 <Icon name="add" size={20} color={COLORS.brand} />
               </Pressable>
             </View>
@@ -336,6 +383,10 @@ export default function CalculatorHome() {
           <ResultRow label={t.calc.doughBall} value={`${dims.doughBall} g`} />
           <ResultRow label={t.calc.sauce} value={`${dims.sauce} g`} />
           <ResultRow label={t.calc.cheese} value={`${dims.cheese} g`} />
+
+          <Text style={styles.hint}>
+            🧪 Kvasac dinamički izračunat: {dough.yeastPct}% (E_total ≈ {dough.eTotal}h) · {roomHours}h@{roomTemp}°C + {fridgeHours}h@{fridgeTemp}°C
+          </Text>
         </View>
 
         {/* 7. ACTIONS */}
@@ -550,12 +601,11 @@ const styles = StyleSheet.create({
   label: { fontSize: 13, color: COLORS.muted, fontWeight: '600' },
   subLabel: { fontSize: 11, color: COLORS.muted, marginTop: 2 },
 
-  flourRowScroll: { gap: SPACING.sm, paddingRight: SPACING.md },
-  flourChip: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, paddingHorizontal: SPACING.md, paddingVertical: 8, borderRadius: RADIUS.md, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border, flexShrink: 0 },
-  flourChipActive: { backgroundColor: COLORS.brand, borderColor: COLORS.brand },
-  flourChipEmoji: { fontSize: 22 },
-  flourChipLabel: { fontSize: 13, fontWeight: '700', color: COLORS.onSurface },
-  flourChipRange: { fontSize: 11, color: COLORS.muted, fontWeight: '600' },
+  flourRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md, paddingHorizontal: SPACING.md, paddingVertical: SPACING.md, borderRadius: RADIUS.md, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border },
+  flourRowActive: { backgroundColor: COLORS.brand, borderColor: COLORS.brand },
+  flourRowEmoji: { fontSize: 28 },
+  flourRowLabel: { fontSize: 15, fontWeight: '700', color: COLORS.onSurface },
+  flourRowRange: { fontSize: 12, color: COLORS.muted, fontWeight: '600', marginTop: 2 },
 
   stepper: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md, backgroundColor: COLORS.surface, borderRadius: RADIUS.pill, paddingHorizontal: 4, borderWidth: 1, borderColor: COLORS.border },
   stepperIdeal: { borderColor: COLORS.success, backgroundColor: '#DCFCE7' },
