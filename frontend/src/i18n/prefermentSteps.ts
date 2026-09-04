@@ -384,3 +384,154 @@ export const RESET_LABEL: Record<Lang, string> = {
   de: 'Markierungen zurücksetzen',
   sl: 'Ponastavi označene korake',
 };
+
+
+// =========================================================================
+// PHASE TIMERS - short alarm chips shown next to each phase title.
+// Locale-agnostic durations + short localized labels via a shared kind system.
+// =========================================================================
+export type TimerKind = 'rt' | 'fridge' | 'rest' | 'ballsRt' | 'ballsFridge' | 'preBake';
+
+export type BaseTimer = { id: string; seconds: number; kind: TimerKind };
+
+// Duration recipes per phaseKey (same across all languages)
+export const PHASE_TIMER_DURATIONS: Record<string, BaseTimer[]> = {
+  // ---- BIGA ----
+  'biga-hand-P1': [
+    { id: 'rt8h', seconds: 8 * 3600, kind: 'rt' },
+    { id: 'fr16h', seconds: 16 * 3600, kind: 'fridge' },
+  ],
+  'biga-mixer-P1': [
+    { id: 'rt8h', seconds: 8 * 3600, kind: 'rt' },
+    { id: 'fr16h', seconds: 16 * 3600, kind: 'fridge' },
+  ],
+  'biga-hand-P3': [
+    { id: 'rest7m', seconds: 7 * 60, kind: 'rest' },
+    { id: 'rt30m', seconds: 30 * 60, kind: 'rt' },
+    { id: 'fr60m', seconds: 60 * 60, kind: 'fridge' },
+    { id: 'brt15m', seconds: 15 * 60, kind: 'ballsRt' },
+    { id: 'bfr5h', seconds: 5 * 3600, kind: 'ballsFridge' },
+    { id: 'pb15m', seconds: 15 * 60, kind: 'preBake' },
+  ],
+  'biga-mixer-P3': [
+    { id: 'rest7m', seconds: 7 * 60, kind: 'rest' },
+    { id: 'rt30m', seconds: 30 * 60, kind: 'rt' },
+    { id: 'fr60m', seconds: 60 * 60, kind: 'fridge' },
+    { id: 'brt15m', seconds: 15 * 60, kind: 'ballsRt' },
+    { id: 'bfr5h', seconds: 5 * 3600, kind: 'ballsFridge' },
+    { id: 'pb15m', seconds: 15 * 60, kind: 'preBake' },
+  ],
+
+  // ---- POOLISH ----
+  'poolish-hand-P1': [
+    { id: 'rt1h', seconds: 60 * 60, kind: 'rt' },
+    { id: 'fr16h', seconds: 16 * 3600, kind: 'fridge' },
+  ],
+  'poolish-mixer-P1': [
+    { id: 'rt1h', seconds: 60 * 60, kind: 'rt' },
+    { id: 'fr16h', seconds: 16 * 3600, kind: 'fridge' },
+  ],
+  'poolish-hand-P3': [
+    { id: 'rt30m', seconds: 30 * 60, kind: 'rt' },
+    { id: 'rt30m2', seconds: 30 * 60, kind: 'rt' },
+    { id: 'brt3h', seconds: 3 * 3600, kind: 'ballsRt' },
+  ],
+  'poolish-mixer-P3': [
+    { id: 'rt30m', seconds: 30 * 60, kind: 'rt' },
+    { id: 'rt30m2', seconds: 30 * 60, kind: 'rt' },
+    { id: 'brt3h', seconds: 3 * 3600, kind: 'ballsRt' },
+  ],
+
+  // ---- DIRECT (existing A/B/C/D) ----
+  'direct-hand-A': [
+    { id: 'rest15m', seconds: 15 * 60, kind: 'rest' },
+  ],
+  'direct-hand-B': [
+    { id: 'rt30m', seconds: 30 * 60, kind: 'rt' },
+    { id: 'fr24h', seconds: 24 * 3600, kind: 'fridge' },
+  ],
+  'direct-hand-C': [
+    { id: 'bfr4h', seconds: 4 * 3600, kind: 'ballsFridge' },
+  ],
+  'direct-hand-D': [
+    { id: 'pb90m', seconds: 90 * 60, kind: 'preBake' },
+  ],
+  'direct-mixer-A': [
+    { id: 'rest5m', seconds: 5 * 60, kind: 'rest' },
+  ],
+  'direct-mixer-B': [
+    { id: 'rt30m', seconds: 30 * 60, kind: 'rt' },
+    { id: 'rt30m2', seconds: 30 * 60, kind: 'rt' },
+    { id: 'fr24h', seconds: 24 * 3600, kind: 'fridge' },
+  ],
+  'direct-mixer-C': [
+    { id: 'brt45m', seconds: 45 * 60, kind: 'ballsRt' },
+    { id: 'bfr4h', seconds: 4 * 3600, kind: 'ballsFridge' },
+  ],
+  'direct-mixer-D': [
+    { id: 'pb17m', seconds: 17 * 60, kind: 'preBake' },
+  ],
+};
+
+// Localized short label per kind
+export const TIMER_KIND_LABEL: Record<Lang, Record<TimerKind, string>> = {
+  hr: { rt: 'Sobna', fridge: 'Frižider', rest: 'Odmor', ballsRt: 'Loptice RT', ballsFridge: 'Loptice frižider', preBake: 'Prije pečenja' },
+  en: { rt: 'Room',   fridge: 'Fridge',   rest: 'Rest',  ballsRt: 'Balls RT',   ballsFridge: 'Balls fridge',    preBake: 'Before bake' },
+  de: { rt: 'Raum',   fridge: 'Kühl.',    rest: 'Ruhe',  ballsRt: 'Kugeln RT',  ballsFridge: 'Kugeln Kühl.',    preBake: 'Vor dem Backen' },
+  sl: { rt: 'Sobna',  fridge: 'Hladilnik',rest: 'Počitek',ballsRt: 'Kepice RT', ballsFridge: 'Kepice hlad.',    preBake: 'Pred peko' },
+};
+
+// Localized notification content
+export const TIMER_NOTIF: Record<Lang, { title: string; body: (label: string) => string; running: string; expiredAlertTitle: string; expiredAlertBody: (label: string) => string }> = {
+  hr: {
+    title: '🍕 Pizzabook · Faza gotova',
+    body: (l) => `${l} — vrijeme je isteklo. Idi na sljedeći korak.`,
+    running: 'U tijeku',
+    expiredAlertTitle: 'Faza gotova',
+    expiredAlertBody: (l) => `${l} — vrijeme je isteklo!`,
+  },
+  en: {
+    title: '🍕 Pizzabook · Phase done',
+    body: (l) => `${l} — time is up. Move to the next step.`,
+    running: 'Running',
+    expiredAlertTitle: 'Phase done',
+    expiredAlertBody: (l) => `${l} — time is up!`,
+  },
+  de: {
+    title: '🍕 Pizzabook · Phase fertig',
+    body: (l) => `${l} — Zeit ist um. Weiter zum nächsten Schritt.`,
+    running: 'Läuft',
+    expiredAlertTitle: 'Phase fertig',
+    expiredAlertBody: (l) => `${l} — Zeit ist um!`,
+  },
+  sl: {
+    title: '🍕 Pizzabook · Faza končana',
+    body: (l) => `${l} — čas je potekel. Pojdi na naslednji korak.`,
+    running: 'Poteka',
+    expiredAlertTitle: 'Faza končana',
+    expiredAlertBody: (l) => `${l} — čas je potekel!`,
+  },
+};
+
+// Human-readable duration ("8 h", "30 min")
+export function formatDuration(seconds: number, lang: Lang): string {
+  if (seconds >= 3600 && seconds % 3600 === 0) {
+    return `${seconds / 3600} h`;
+  }
+  if (seconds >= 3600) {
+    const h = Math.floor(seconds / 3600);
+    const m = Math.round((seconds % 3600) / 60);
+    return m ? `${h} h ${m} min` : `${h} h`;
+  }
+  return `${Math.round(seconds / 60)} min`;
+}
+
+// Countdown "HH:MM:SS" or "MM:SS"
+export function formatCountdown(msRemaining: number): string {
+  const total = Math.max(0, Math.ceil(msRemaining / 1000));
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${pad(m)}:${pad(s)}`;
+}

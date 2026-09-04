@@ -86,12 +86,22 @@ export async function getPermissionState(): Promise<{ status: string; canAskAgai
   }
 }
 
-export async function scheduleLocal(title: string, body: string, seconds: number) {
-  if (!mod) return;
+export async function scheduleLocal(title: string, body: string, seconds: number): Promise<string | null> {
+  if (!mod) return null;
   try {
-    await mod.scheduleNotificationAsync({
+    const id = await mod.scheduleNotificationAsync({
       content: { title, body, sound: 'default' },
       trigger: { seconds, channelId: 'default' } as any,
     });
+    return id ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export async function cancelLocal(id: string) {
+  if (!mod || !id) return;
+  try {
+    await mod.cancelScheduledNotificationAsync(id);
   } catch {}
 }

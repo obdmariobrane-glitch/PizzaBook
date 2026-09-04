@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, Modal, TextInput, Platform } from 'react-native';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { View, Text, StyleSheet, ScrollView, Pressable, Modal, TextInput, Platform, Alert } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import Icon from '@react-native-vector-icons/ionicons';
@@ -7,7 +7,13 @@ import * as Haptics from 'expo-haptics';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { useT } from '../../src/i18n/LanguageProvider';
-import { BIGA_STEPS, POOLISH_STEPS, RESET_LABEL } from '../../src/i18n/prefermentSteps';
+import {
+  BIGA_STEPS, POOLISH_STEPS, RESET_LABEL,
+  PHASE_TIMER_DURATIONS, TIMER_KIND_LABEL, TIMER_NOTIF, BaseTimer,
+  formatDuration, formatCountdown,
+} from '../../src/i18n/prefermentSteps';
+import type { Lang } from '../../src/i18n/translations';
+import { scheduleLocal, cancelLocal, isPushSupported } from '../../src/notifications';
 import { COLORS, SPACING, RADIUS } from '../../src/theme';
 import {
   dimensionsCalc, doughCalc, iceCalc,
@@ -16,13 +22,13 @@ import {
 import { useAuth } from '../../src/auth';
 
 const DIAMETERS = [26, 28, 30, 33, 35, 40];
-const FLOURS: { key: FlourType; emoji: string; label: string; sub?: string }[] = [
-  { key: 'caputo00', emoji: '🌾', label: 'Tipo 0 i 00', sub: 'Caputo Pizzeria / klasično 00' },
-  { key: 'manitoba', emoji: '🥖', label: 'Manitoba / Visoki W', sub: 'Caputo Cuoco / Oro' },
-  { key: 'spelt', emoji: '🌿', label: 'Pirovo brašno', sub: 'Spelt' },
-  { key: 'wholeWheat', emoji: '🍞', label: 'Integralno brašno' },
-  { key: 'glutenFree', emoji: '🌽', label: 'Bezglutensko', sub: 'Gluten-Free' },
-  { key: 'custom', emoji: '🧪', label: 'Mješavina brašna', sub: 'Custom blend 2 vrste' },
+const FLOURS: { key: FlourType; label: string; suffix: string; info?: string }[] = [
+  { key: 'caputo00',   label: 'Tipo 0 / 00',           suffix: 'Idealno 68%', info: 'Klasično meko brašno za neapolitansku pizzu.\n\nPrimjeri: Caputo Pizzeria, Caputo Classica, Molino Dallagiovanna Rinforzato.\n\nW faktor ~ 260–300. Idealna hidracija 65–70%.' },
+  { key: 'manitoba',   label: 'Manitoba / Visoki W',   suffix: 'Idealno 75%', info: 'Jače brašno s puno glutena za dugu hladnu fermentaciju i visoku hidraciju.\n\nPrimjeri: Caputo Cuoco, Caputo Oro, Manitoba Le 5 Stagioni.\n\nW faktor 320+. Idealna hidracija 70–80%.' },
+  { key: 'spelt',      label: 'Pirovo brašno',         suffix: 'Idealno 62%', info: 'Aromatično brašno stare žitarice. Kraća fermentacija, niža hidracija.\n\nČesto se koristi u mješavini 30–50% s Tipo 00 za punoću okusa.' },
+  { key: 'wholeWheat', label: 'Integralno brašno',     suffix: 'Idealno 72%', info: 'Integralno pšenično brašno. Više vlakana, tamnija boja, blago orašast okus.\n\nNajbolje u mješavini 20–40% s Tipo 00.' },
+  { key: 'glutenFree', label: 'Bezglutensko brašno',   suffix: 'Idealno 80%', info: 'Poseban bezglutenski miks (npr. Caputo Fioreglut, Schär Mix B). Zahtijeva višu hidraciju i drukčiji zamjes.\n\nBez klasičnog razvoja glutena — pizza se često peče u kalupu.' },
+  { key: 'custom',     label: 'Mješavina brašna (Blend)', suffix: 'Prilagođeno', info: 'Kombiniraj dva brašna A i B. Aplikacija automatski računa idealnu hidraciju kao ponderirani prosjek dvaju odabranih brašna.' },
 ];
 
 export default function CalculatorHome() {
@@ -49,6 +55,38 @@ export default function CalculatorHome() {
   const [showMixSteps, setShowMixSteps] = useState(false);
   const [moreTool, setMoreTool] = useState<null | 'school' | 'leftover' | 'shopping'>(null);
   const [completedSteps, setCompletedSteps] = useState<Record<string, boolean>>({});
+  const [flourInfo, setFlourInfo] = useState<null | { label: string; info: string }>(null);
+  const [activeTimers, setActiveTimers] = useState<Record<string, { endsAt: number; label: string; notifId?: string | null }>>({});
+  const alertedRef = useRef<Set<string>>(new Set());
+  // ticker: force re-render each second for countdowns AND check for expired timers
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const active = Object.entries(activeTimers);
+    if (active.length === 0) return;
+    const iv = setInterval(() => {
+      const now = Date.now();
+      const expired: string[] = [];
+      for (const [k, v] of active) {
+        if (v.endsAt <= now && !alertedRef.current.has(k)) expired.push(k);
+      }
+      if (expired.length > 0) {
+        const NOTIF = TIMER_NOTIF[lang];
+        for (const k of expired) alertedRef.current.add(k);
+        setActiveTimers((prev) => {
+          const next = { ...prev };
+          for (const k of expired) delete next[k];
+          AsyncStorage.setItem('activeTimers', JSON.stringify(next)).catch(() => {});
+          return next;
+        });
+        try { Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); } catch {}
+        const firstLabel = activeTimers[expired[0]]?.label ?? '';
+        Alert.alert(NOTIF.expiredAlertTitle, NOTIF.expiredAlertBody(firstLabel));
+      } else {
+        setTick((n) => n + 1);
+      }
+    }, 1000);
+    return () => clearInterval(iv);
+  }, [activeTimers, lang]);
 
   // Load persisted checkbox state
   useEffect(() => {
@@ -79,6 +117,57 @@ export default function CalculatorHome() {
       return next;
     });
     try { Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning); } catch {}
+  };
+
+  // Load persisted active timers
+  useEffect(() => {
+    AsyncStorage.getItem('activeTimers').then((v) => {
+      if (!v) return;
+      try {
+        const parsed = JSON.parse(v) as Record<string, { endsAt: number; label: string; notifId?: string | null }>;
+        // drop already-expired timers
+        const now = Date.now();
+        const fresh: typeof parsed = {};
+        for (const [k, val] of Object.entries(parsed)) {
+          if (val && val.endsAt > now) fresh[k] = val;
+        }
+        setActiveTimers(fresh);
+        AsyncStorage.setItem('activeTimers', JSON.stringify(fresh)).catch(() => {});
+      } catch {}
+    });
+  }, []);
+
+  const startTimer = async (phaseKey: string, t: BaseTimer) => {
+    const key = `${phaseKey}-${t.id}`;
+    if (activeTimers[key]) return; // already running
+    const label = `${TIMER_KIND_LABEL[lang][t.kind]} · ${formatDuration(t.seconds, lang)}`;
+    const NOTIF = TIMER_NOTIF[lang];
+    let notifId: string | null = null;
+    try {
+      if (isPushSupported()) {
+        notifId = await scheduleLocal(NOTIF.title, NOTIF.body(label), t.seconds);
+      }
+    } catch {}
+    const endsAt = Date.now() + t.seconds * 1000;
+    setActiveTimers((prev) => {
+      const next = { ...prev, [key]: { endsAt, label, notifId } };
+      AsyncStorage.setItem('activeTimers', JSON.stringify(next)).catch(() => {});
+      return next;
+    });
+    try { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); } catch {}
+  };
+
+  const stopTimer = async (phaseKey: string, timerId: string) => {
+    const key = `${phaseKey}-${timerId}`;
+    const t = activeTimers[key];
+    if (t?.notifId) { try { await cancelLocal(t.notifId); } catch {} }
+    setActiveTimers((prev) => {
+      const next = { ...prev };
+      delete next[key];
+      AsyncStorage.setItem('activeTimers', JSON.stringify(next)).catch(() => {});
+      return next;
+    });
+    try { Haptics.selectionAsync(); } catch {}
   };
 
   const SALT_PCT = 2.8;
@@ -178,26 +267,30 @@ export default function CalculatorHome() {
 
       <ScrollView contentContainerStyle={{ padding: SPACING.lg, paddingBottom: SPACING.xxxl * 2, gap: SPACING.lg }} keyboardShouldPersistTaps="handled">
 
-        {/* 1. FLOUR - vertical list, one below another */}
+        {/* 1. FLOUR - compact single-row list */}
         <View style={styles.card}>
           <Text style={styles.cardTitle}>1 · {t.calc.flourType}</Text>
-          <View style={{ gap: SPACING.sm }}>
+          <View style={{ gap: 6 }}>
             {FLOURS.map((f) => {
-              const p = FLOUR_PROFILES[f.key];
               const active = flour === f.key;
-              const rangeText = f.key === 'custom'
-                ? 'Odaberi 2 brašna i udio'
-                : `Idealno ${p.ideal}% · raspon ${p.min}–${p.max}%`;
               return (
-                <Pressable key={f.key} testID={`flour-${f.key}`} onPress={() => changeFlour(f.key)} style={[styles.flourRow, active && styles.flourRowActive]}>
-                  <Text style={styles.flourRowEmoji}>{f.emoji}</Text>
-                  <View style={{ flex: 1 }}>
-                    <Text style={[styles.flourRowLabel, active && { color: '#fff' }]}>{f.label}</Text>
-                    {f.sub ? <Text style={[styles.flourRowSub, active && { color: 'rgba(255,255,255,0.85)' }]} numberOfLines={1}>{f.sub}</Text> : null}
-                    <Text style={[styles.flourRowRange, active && { color: '#fff' }]}>{rangeText}</Text>
-                  </View>
-                  {active ? <Icon name="checkmark-circle" size={20} color="#fff" /> : null}
-                </Pressable>
+                <View key={f.key} style={styles.flourRowWrap}>
+                  <Pressable testID={`flour-${f.key}`} onPress={() => changeFlour(f.key)} style={[styles.flourCompact, active && styles.flourCompactActive]}>
+                    <Text style={[styles.flourCompactLabel, active && { color: '#fff' }]} numberOfLines={1}>{f.label}</Text>
+                    <Text style={[styles.flourCompactSuffix, active && { color: 'rgba(255,255,255,0.9)' }]} numberOfLines={1}>— {f.suffix}</Text>
+                    {active ? <Icon name="checkmark-circle" size={16} color="#fff" style={{ marginLeft: 4 }} /> : null}
+                  </Pressable>
+                  {f.info ? (
+                    <Pressable
+                      testID={`flour-info-${f.key}`}
+                      onPress={() => setFlourInfo({ label: f.label, info: f.info! })}
+                      hitSlop={8}
+                      style={styles.infoBtn}
+                    >
+                      <Icon name="information-circle-outline" size={18} color={active ? '#fff' : COLORS.muted} />
+                    </Pressable>
+                  ) : null}
+                </View>
               );
             })}
           </View>
@@ -389,17 +482,17 @@ export default function CalculatorHome() {
               {method === 'direct' ? (
                 mixing === 'hand' ? (
                   <>
-                    <PhaseBlock title={t.calc.handMixSteps.A.title} steps={t.calc.handMixSteps.A.steps} phaseKey={`direct-hand-A`} completed={completedSteps} onToggle={toggleStep} />
-                    <PhaseBlock title={t.calc.handMixSteps.B.title} steps={t.calc.handMixSteps.B.steps} phaseKey={`direct-hand-B`} completed={completedSteps} onToggle={toggleStep} />
-                    <PhaseBlock title={t.calc.handMixSteps.C.title} steps={t.calc.handMixSteps.C.steps} phaseKey={`direct-hand-C`} completed={completedSteps} onToggle={toggleStep} />
-                    <PhaseBlock title={t.calc.handMixSteps.D.title} steps={t.calc.handMixSteps.D.steps} phaseKey={`direct-hand-D`} completed={completedSteps} onToggle={toggleStep} />
+                    <PhaseBlock title={t.calc.handMixSteps.A.title} steps={t.calc.handMixSteps.A.steps} phaseKey={`direct-hand-A`} completed={completedSteps} onToggle={toggleStep} activeTimers={activeTimers} onStartTimer={startTimer} onStopTimer={stopTimer} lang={lang} />
+                    <PhaseBlock title={t.calc.handMixSteps.B.title} steps={t.calc.handMixSteps.B.steps} phaseKey={`direct-hand-B`} completed={completedSteps} onToggle={toggleStep} activeTimers={activeTimers} onStartTimer={startTimer} onStopTimer={stopTimer} lang={lang} />
+                    <PhaseBlock title={t.calc.handMixSteps.C.title} steps={t.calc.handMixSteps.C.steps} phaseKey={`direct-hand-C`} completed={completedSteps} onToggle={toggleStep} activeTimers={activeTimers} onStartTimer={startTimer} onStopTimer={stopTimer} lang={lang} />
+                    <PhaseBlock title={t.calc.handMixSteps.D.title} steps={t.calc.handMixSteps.D.steps} phaseKey={`direct-hand-D`} completed={completedSteps} onToggle={toggleStep} activeTimers={activeTimers} onStartTimer={startTimer} onStopTimer={stopTimer} lang={lang} />
                   </>
                 ) : (
                   <>
-                    <PhaseBlock title={t.calc.mixerSteps.A.title} steps={t.calc.mixerSteps.A.steps} phaseKey={`direct-mixer-A`} completed={completedSteps} onToggle={toggleStep} />
-                    <PhaseBlock title={t.calc.mixerSteps.B.title} steps={t.calc.mixerSteps.B.steps} phaseKey={`direct-mixer-B`} completed={completedSteps} onToggle={toggleStep} />
-                    <PhaseBlock title={t.calc.mixerSteps.C.title} steps={t.calc.mixerSteps.C.steps} phaseKey={`direct-mixer-C`} completed={completedSteps} onToggle={toggleStep} />
-                    <PhaseBlock title={t.calc.mixerSteps.D.title} steps={t.calc.mixerSteps.D.steps} phaseKey={`direct-mixer-D`} completed={completedSteps} onToggle={toggleStep} />
+                    <PhaseBlock title={t.calc.mixerSteps.A.title} steps={t.calc.mixerSteps.A.steps} phaseKey={`direct-mixer-A`} completed={completedSteps} onToggle={toggleStep} activeTimers={activeTimers} onStartTimer={startTimer} onStopTimer={stopTimer} lang={lang} />
+                    <PhaseBlock title={t.calc.mixerSteps.B.title} steps={t.calc.mixerSteps.B.steps} phaseKey={`direct-mixer-B`} completed={completedSteps} onToggle={toggleStep} activeTimers={activeTimers} onStartTimer={startTimer} onStopTimer={stopTimer} lang={lang} />
+                    <PhaseBlock title={t.calc.mixerSteps.C.title} steps={t.calc.mixerSteps.C.steps} phaseKey={`direct-mixer-C`} completed={completedSteps} onToggle={toggleStep} activeTimers={activeTimers} onStartTimer={startTimer} onStopTimer={stopTimer} lang={lang} />
+                    <PhaseBlock title={t.calc.mixerSteps.D.title} steps={t.calc.mixerSteps.D.steps} phaseKey={`direct-mixer-D`} completed={completedSteps} onToggle={toggleStep} activeTimers={activeTimers} onStartTimer={startTimer} onStopTimer={stopTimer} lang={lang} />
                   </>
                 )
               ) : method === 'biga' ? (
@@ -407,9 +500,9 @@ export default function CalculatorHome() {
                   const path = BIGA_STEPS[lang][mixing];
                   return (
                     <>
-                      <PhaseBlock title={path.p1.title} steps={path.p1.steps} phaseKey={`biga-${mixing}-P1`} completed={completedSteps} onToggle={toggleStep} />
-                      <PhaseBlock title={path.p2.title} steps={path.p2.steps} phaseKey={`biga-${mixing}-P2`} completed={completedSteps} onToggle={toggleStep} />
-                      <PhaseBlock title={path.p3.title} steps={path.p3.steps} phaseKey={`biga-${mixing}-P3`} completed={completedSteps} onToggle={toggleStep} />
+                      <PhaseBlock title={path.p1.title} steps={path.p1.steps} phaseKey={`biga-${mixing}-P1`} completed={completedSteps} onToggle={toggleStep} activeTimers={activeTimers} onStartTimer={startTimer} onStopTimer={stopTimer} lang={lang} />
+                      <PhaseBlock title={path.p2.title} steps={path.p2.steps} phaseKey={`biga-${mixing}-P2`} completed={completedSteps} onToggle={toggleStep} activeTimers={activeTimers} onStartTimer={startTimer} onStopTimer={stopTimer} lang={lang} />
+                      <PhaseBlock title={path.p3.title} steps={path.p3.steps} phaseKey={`biga-${mixing}-P3`} completed={completedSteps} onToggle={toggleStep} activeTimers={activeTimers} onStartTimer={startTimer} onStopTimer={stopTimer} lang={lang} />
                     </>
                   );
                 })()
@@ -418,9 +511,9 @@ export default function CalculatorHome() {
                   const path = POOLISH_STEPS[lang][mixing];
                   return (
                     <>
-                      <PhaseBlock title={path.p1.title} steps={path.p1.steps} phaseKey={`poolish-${mixing}-P1`} completed={completedSteps} onToggle={toggleStep} />
-                      <PhaseBlock title={path.p2.title} steps={path.p2.steps} phaseKey={`poolish-${mixing}-P2`} completed={completedSteps} onToggle={toggleStep} />
-                      <PhaseBlock title={path.p3.title} steps={path.p3.steps} phaseKey={`poolish-${mixing}-P3`} completed={completedSteps} onToggle={toggleStep} />
+                      <PhaseBlock title={path.p1.title} steps={path.p1.steps} phaseKey={`poolish-${mixing}-P1`} completed={completedSteps} onToggle={toggleStep} activeTimers={activeTimers} onStartTimer={startTimer} onStopTimer={stopTimer} lang={lang} />
+                      <PhaseBlock title={path.p2.title} steps={path.p2.steps} phaseKey={`poolish-${mixing}-P2`} completed={completedSteps} onToggle={toggleStep} activeTimers={activeTimers} onStartTimer={startTimer} onStopTimer={stopTimer} lang={lang} />
+                      <PhaseBlock title={path.p3.title} steps={path.p3.steps} phaseKey={`poolish-${mixing}-P3`} completed={completedSteps} onToggle={toggleStep} activeTimers={activeTimers} onStartTimer={startTimer} onStopTimer={stopTimer} lang={lang} />
                     </>
                   );
                 })()
@@ -553,6 +646,22 @@ export default function CalculatorHome() {
         {moreTool === 'leftover' && <LeftoverModal onClose={() => setMoreTool(null)} />}
         {moreTool === 'shopping' && <ShoppingModal onClose={() => setMoreTool(null)} />}
       </Modal>
+
+      {/* Flour info tooltip modal */}
+      <Modal visible={!!flourInfo} animationType="fade" transparent onRequestClose={() => setFlourInfo(null)}>
+        <Pressable style={styles.tooltipBackdrop} onPress={() => setFlourInfo(null)}>
+          <Pressable style={styles.tooltipCard} onPress={() => {}}>
+            <View style={styles.tooltipHeader}>
+              <Icon name="information-circle" size={20} color={COLORS.brand} />
+              <Text style={styles.tooltipTitle}>{flourInfo?.label}</Text>
+              <Pressable onPress={() => setFlourInfo(null)} hitSlop={8}>
+                <Icon name="close" size={20} color={COLORS.muted} />
+              </Pressable>
+            </View>
+            <Text style={styles.tooltipBody}>{flourInfo?.info}</Text>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
@@ -569,16 +678,52 @@ function ResultRow({ label, value, highlight }: { label: string; value: string; 
 
 function PhaseBlock({
   title, steps, phaseKey, completed, onToggle,
+  activeTimers, onStartTimer, onStopTimer, lang,
 }: {
   title: string;
   steps: readonly string[];
   phaseKey: string;
   completed: Record<string, boolean>;
   onToggle: (key: string) => void;
+  activeTimers: Record<string, { endsAt: number; label: string; notifId?: string | null }>;
+  onStartTimer: (phaseKey: string, t: BaseTimer) => void;
+  onStopTimer: (phaseKey: string, timerId: string) => void;
+  lang: Lang;
 }) {
+  const timers = PHASE_TIMER_DURATIONS[phaseKey] || [];
   return (
     <View style={{ marginBottom: SPACING.md }}>
       <Text style={styles.phaseTitle}>{title}</Text>
+      {timers.length > 0 ? (
+        <View style={styles.timerRow}>
+          {timers.map((tm) => {
+            const key = `${phaseKey}-${tm.id}`;
+            const active = activeTimers[key];
+            const remaining = active ? active.endsAt - Date.now() : 0;
+            const kindLabel = TIMER_KIND_LABEL[lang][tm.kind];
+            return (
+              <Pressable
+                key={key}
+                testID={`timer-${key}`}
+                onPress={() => (active ? onStopTimer(phaseKey, tm.id) : onStartTimer(phaseKey, tm))}
+                style={[styles.timerChip, active && styles.timerChipActive]}
+              >
+                <Icon
+                  name={active ? 'stop-circle' : 'play-circle'}
+                  size={14}
+                  color={active ? '#fff' : COLORS.brand}
+                />
+                <Text style={[styles.timerChipText, active && { color: '#fff' }]}>
+                  {kindLabel}
+                </Text>
+                <Text style={[styles.timerChipDuration, active && { color: '#fff' }]}>
+                  {active ? formatCountdown(remaining) : formatDuration(tm.seconds, lang)}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      ) : null}
       {steps.map((s, i) => {
         const key = `${phaseKey}-${i}`;
         const done = !!completed[key];
@@ -773,6 +918,24 @@ const styles = StyleSheet.create({
   flourRowLabel: { fontSize: 15, fontWeight: '700', color: COLORS.onSurface },
   flourRowSub: { fontSize: 11, color: COLORS.muted, marginTop: 2, fontStyle: 'italic' },
   flourRowRange: { fontSize: 12, color: COLORS.muted, fontWeight: '600', marginTop: 2 },
+  // NEW compact single-line flour row
+  flourRowWrap: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  flourCompact: { flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: SPACING.md, paddingVertical: 10, borderRadius: RADIUS.md, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border, minHeight: 42 },
+  flourCompactActive: { backgroundColor: COLORS.brand, borderColor: COLORS.brand },
+  flourCompactLabel: { fontSize: 13, fontWeight: '700', color: COLORS.onSurface, flexShrink: 1 },
+  flourCompactSuffix: { fontSize: 12, color: COLORS.muted, fontWeight: '600', marginLeft: 6, flexShrink: 0 },
+  infoBtn: { width: 26, height: 32, alignItems: 'center', justifyContent: 'center' },
+  tooltipBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center', justifyContent: 'center', padding: SPACING.lg },
+  tooltipCard: { width: '100%', maxWidth: 360, backgroundColor: COLORS.surface, borderRadius: RADIUS.lg, padding: SPACING.lg, gap: SPACING.md, borderWidth: 1, borderColor: COLORS.border },
+  tooltipHeader: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm },
+  tooltipTitle: { flex: 1, fontSize: 16, fontWeight: '800', color: COLORS.onSurface },
+  tooltipBody: { fontSize: 13, color: COLORS.onSurfaceTertiary, lineHeight: 20 },
+  // Timer chips
+  timerRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: SPACING.sm },
+  timerChip: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 6, borderRadius: RADIUS.pill, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border },
+  timerChipActive: { backgroundColor: COLORS.success, borderColor: COLORS.success },
+  timerChipText: { color: COLORS.onSurface, fontSize: 11, fontWeight: '700' },
+  timerChipDuration: { color: COLORS.brand, fontSize: 12, fontWeight: '800', marginLeft: 2 },
   blendPanel: { marginTop: SPACING.md, padding: SPACING.md, backgroundColor: COLORS.brandTertiary, borderRadius: RADIUS.md, gap: SPACING.sm },
   blendTitle: { fontSize: 12, fontWeight: '800', color: COLORS.brand, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 2 },
 

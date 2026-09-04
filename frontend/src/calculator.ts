@@ -8,11 +8,11 @@ export type OvenType = 'ooni' | 'homeStone' | 'homePan';
 export type FlourType = 'caputo00' | 'manitoba' | 'spelt' | 'wholeWheat' | 'glutenFree' | 'custom';
 
 export const FLOUR_PROFILES: Record<FlourType, { label: string; ideal: number; min: number; max: number }> = {
-  caputo00: { label: 'Tipo 0 i 00', ideal: 68, min: 65, max: 70 },
+  caputo00: { label: 'Tipo 0 / 00', ideal: 68, min: 65, max: 70 },
   manitoba: { label: 'Manitoba / Visoki W', ideal: 75, min: 70, max: 80 },
   spelt: { label: 'Pirovo brašno', ideal: 62, min: 60, max: 65 },
   wholeWheat: { label: 'Integralno brašno', ideal: 72, min: 70, max: 75 },
-  glutenFree: { label: 'Bezglutensko', ideal: 80, min: 75, max: 85 },
+  glutenFree: { label: 'Bezglutensko brašno', ideal: 80, min: 75, max: 85 },
   custom: { label: 'Mješavina brašna', ideal: 68, min: 55, max: 90 },
 };
 
