@@ -8,12 +8,20 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { useT } from '../../src/i18n/LanguageProvider';
 import { COLORS, SPACING, RADIUS } from '../../src/theme';
-import { dimensionsCalc, doughCalc, bakingCalc, iceCalc, Method, OvenType } from '../../src/calculator';
+import {
+  dimensionsCalc, doughCalc, iceCalc,
+  Method, OvenType, FlourType, FLOUR_PROFILES,
+} from '../../src/calculator';
 import { useAuth } from '../../src/auth';
 
 const DIAMETERS = [26, 28, 30, 33, 35, 40];
-const HYDRATIONS = [60, 62, 65, 68, 70, 72, 75, 78, 80];
-const ROOM_TEMPS = [18, 22, 26, 28];
+const FLOURS: { key: FlourType; emoji: string; label: string }[] = [
+  { key: 'caputo00', emoji: '🌾', label: 'Caputo 00 / Tipo 0' },
+  { key: 'manitoba', emoji: '💪', label: 'Manitoba / Visoki W' },
+  { key: 'spelt', emoji: '🌿', label: 'Pirovo / Spelt' },
+  { key: 'wholeWheat', emoji: '🌰', label: 'Integralno' },
+  { key: 'glutenFree', emoji: '🚫', label: 'Bezglutensko' },
+];
 
 export default function CalculatorHome() {
   const insets = useSafeAreaInsets();
@@ -21,32 +29,41 @@ export default function CalculatorHome() {
   const { t } = useT();
   const { user } = useAuth();
 
+  const [flour, setFlour] = useState<FlourType>('caputo00');
   const [pizzas, setPizzas] = useState(4);
   const [diameter, setDiameter] = useState(30);
   const [customDiameter, setCustomDiameter] = useState('');
   const [method, setMethod] = useState<Method>('direct');
-  const [hydration, setHydration] = useState(68);
+  const [hydration, setHydration] = useState(FLOUR_PROFILES.caputo00.ideal);
   const [roomTemp, setRoomTemp] = useState(22);
   const [oven, setOven] = useState<OvenType>('homeStone');
+  const [mixing, setMixing] = useState<'hand' | 'mixer'>('hand');
+  const [showMixSteps, setShowMixSteps] = useState(false);
   const [moreTool, setMoreTool] = useState<null | 'school' | 'leftover' | 'shopping'>(null);
 
-  // Compute reactive
+  const flourProfile = FLOUR_PROFILES[flour];
+  const isIdealHydration = hydration === flourProfile.ideal;
+  const inRange = hydration >= flourProfile.min && hydration <= flourProfile.max;
+
+  // Reactive calculations
   const dims = useMemo(() => dimensionsCalc(diameter, pizzas), [diameter, pizzas]);
   const dough = useMemo(() => doughCalc({
     pizzas, ballWeight: dims.doughBall, hydration,
     saltPct: 2.8, oilPct: 2, method,
-    yeastType: 'fresh', mixing: 'hand',
+    yeastType: 'fresh', mixing: mixing === 'mixer' ? 'spiral' : 'hand',
     roomTemp, fridgeTemp: 4, fermentation: 'coldLong',
-  }), [pizzas, dims.doughBall, hydration, method, roomTemp]);
-  const baking = useMemo(() => bakingCalc(oven), [oven]);
+  }), [pizzas, dims.doughBall, hydration, method, roomTemp, mixing]);
   const iceNeeded = roomTemp >= 26;
   const ice = useMemo(() => iceNeeded ? iceCalc(dough.total.water, roomTemp, 4) : null, [iceNeeded, dough.total.water, roomTemp]);
 
-  const setPizzasSafe = (n: number) => {
-    if (n < 1 || n > 20) return;
+  // Auto-adjust hydration when flour changes to that flour's ideal
+  const changeFlour = (f: FlourType) => {
+    setFlour(f);
+    setHydration(FLOUR_PROFILES[f].ideal);
     try { Haptics.selectionAsync(); } catch {}
-    setPizzas(n);
   };
+
+  const step = (fn: () => void) => { try { Haptics.selectionAsync(); } catch {}; fn(); };
 
   const commitCustomDiameter = () => {
     const v = parseFloat(customDiameter);
@@ -56,10 +73,11 @@ export default function CalculatorHome() {
 
   const saveRecipe = async () => {
     const recipe = {
-      pizzas, diameter, hydration, method, flourType: '00',
+      pizzas, diameter, hydration, method, flourType: flourProfile.label,
       ballWeight: dims.doughBall,
       flour: dough.total.flour, water: dough.total.water,
       salt: dough.total.salt, oil: dough.total.oil, yeast: dough.total.yeast,
+      sauce: dims.sauce * pizzas, cheese: dims.cheese * pizzas,
     };
     await AsyncStorage.setItem('lastRecipe', JSON.stringify(recipe));
   };
@@ -77,6 +95,13 @@ export default function CalculatorHome() {
     setMoreTool('shopping');
   };
 
+  const bakingSteps =
+    oven === 'homeStone' ? t.calc.homeStoneSteps :
+    oven === 'ooni' ? t.calc.ooniSteps : t.calc.homePanSteps;
+  const bakingTemp =
+    oven === 'homeStone' ? '300°C + grill · 4–6 min' :
+    oven === 'ooni' ? '430–480°C · 60–90 s' : '280°C · 8–10 min';
+
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
       <View style={styles.header}>
@@ -87,56 +112,65 @@ export default function CalculatorHome() {
         <Text style={styles.subtitle}>{t.calc.title}</Text>
       </View>
 
-      <ScrollView contentContainerStyle={{ padding: SPACING.lg, paddingBottom: SPACING.xxxl * 2, gap: SPACING.lg }}>
+      <ScrollView contentContainerStyle={{ padding: SPACING.lg, paddingBottom: SPACING.xxxl * 2, gap: SPACING.lg }} keyboardShouldPersistTaps="handled">
 
-        {/* 1. Veličina pizze */}
+        {/* 1. FLOUR */}
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>{t.calc.dimensions}</Text>
+          <Text style={styles.cardTitle}>1 · {t.calc.flourType}</Text>
+          <View style={styles.flourGrid}>
+            {FLOURS.map((f) => {
+              const p = FLOUR_PROFILES[f.key];
+              const active = flour === f.key;
+              return (
+                <Pressable key={f.key} testID={`flour-${f.key}`} onPress={() => changeFlour(f.key)} style={[styles.flourCard, active && styles.flourCardActive]}>
+                  <Text style={styles.flourEmoji}>{f.emoji}</Text>
+                  <Text style={[styles.flourLabel, active && { color: '#fff' }]} numberOfLines={2}>{f.label}</Text>
+                  <Text style={[styles.flourRange, active && { color: '#fff' }]}>{p.min}–{p.max}% (◎ {p.ideal}%)</Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        </View>
 
+        {/* 2. VELIČINA PIZZE */}
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>2 · {t.calc.dimensions}</Text>
           <View style={styles.row}>
             <Text style={styles.label}>{t.calc.pizzas}</Text>
             <View style={styles.stepper}>
-              <Pressable testID="pizza-minus" onPress={() => setPizzasSafe(pizzas - 1)} style={styles.stepBtn}>
+              <Pressable testID="pizza-minus" onPress={() => step(() => setPizzas(Math.max(1, pizzas - 1)))} style={styles.stepBtn}>
                 <Icon name="remove" size={22} color={COLORS.brand} />
               </Pressable>
               <Text style={styles.stepVal}>{pizzas}</Text>
-              <Pressable testID="pizza-plus" onPress={() => setPizzasSafe(pizzas + 1)} style={styles.stepBtn}>
+              <Pressable testID="pizza-plus" onPress={() => step(() => setPizzas(Math.min(50, pizzas + 1)))} style={styles.stepBtn}>
                 <Icon name="add" size={22} color={COLORS.brand} />
               </Pressable>
             </View>
           </View>
-
           <Text style={[styles.label, { marginTop: SPACING.md }]}>{t.calc.diameter}</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
             {DIAMETERS.map((d) => (
-              <Pressable
-                key={d}
-                testID={`diam-${d}`}
-                onPress={() => { setDiameter(d); try { Haptics.selectionAsync(); } catch {} }}
-                style={[styles.chip, diameter === d && styles.chipActive]}
-              >
+              <Pressable key={d} testID={`diam-${d}`} onPress={() => step(() => setDiameter(d))} style={[styles.chip, diameter === d && styles.chipActive]}>
                 <Text style={[styles.chipText, diameter === d && styles.chipTextActive]}>{d} cm</Text>
               </Pressable>
             ))}
-            <View style={styles.customWrap}>
-              <TextInput
-                testID="custom-diameter"
-                value={customDiameter}
-                onChangeText={setCustomDiameter}
-                onBlur={commitCustomDiameter}
-                onSubmitEditing={commitCustomDiameter}
-                keyboardType="number-pad"
-                placeholder="cm"
-                placeholderTextColor={COLORS.muted}
-                style={styles.customInput}
-              />
-            </View>
+            <TextInput
+              testID="custom-diameter"
+              value={customDiameter}
+              onChangeText={setCustomDiameter}
+              onBlur={commitCustomDiameter}
+              onSubmitEditing={commitCustomDiameter}
+              keyboardType="number-pad"
+              placeholder="cm"
+              placeholderTextColor={COLORS.muted}
+              style={styles.customInput}
+            />
           </ScrollView>
         </View>
 
-        {/* 2. Method + Hydration */}
+        {/* 3. METHOD + HYDRATION + TEMP */}
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>{t.calc.method} + {t.calc.hydration}</Text>
+          <Text style={styles.cardTitle}>3 · {t.calc.method} + {t.calc.hydration}</Text>
 
           <Text style={styles.label}>{t.calc.method}</Text>
           <View style={styles.pillGroup}>
@@ -145,77 +179,110 @@ export default function CalculatorHome() {
               { k: 'biga' as const, l: t.calc.biga },
               { k: 'poolish' as const, l: t.calc.poolish },
             ].map((m) => (
-              <Pressable
-                key={m.k}
-                testID={`method-${m.k}`}
-                onPress={() => { setMethod(m.k); try { Haptics.selectionAsync(); } catch {} }}
-                style={[styles.pill, method === m.k && styles.pillActive]}
-              >
+              <Pressable key={m.k} testID={`method-${m.k}`} onPress={() => step(() => setMethod(m.k))} style={[styles.pill, method === m.k && styles.pillActive]}>
                 <Text style={[styles.pillText, method === m.k && styles.pillTextActive]}>{m.l}</Text>
               </Pressable>
             ))}
           </View>
 
-          <Text style={[styles.label, { marginTop: SPACING.md }]}>{t.calc.hydration}: <Text style={{ color: COLORS.brand, fontWeight: '800' }}>{hydration}%</Text></Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
-            {HYDRATIONS.map((h) => (
-              <Pressable
-                key={h}
-                testID={`hyd-${h}`}
-                onPress={() => { setHydration(h); try { Haptics.selectionAsync(); } catch {} }}
-                style={[styles.chip, hydration === h && styles.chipActive]}
-              >
-                <Text style={[styles.chipText, hydration === h && styles.chipTextActive]}>{h}%</Text>
+          <View style={styles.hydRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.label}>{t.calc.hydration}</Text>
+              <Text style={styles.subLabel}>{t.calc.idealHydration}: {flourProfile.min}–{flourProfile.max}% (◎ {flourProfile.ideal}%)</Text>
+            </View>
+            <View style={[styles.stepper, isIdealHydration && styles.stepperIdeal, !isIdealHydration && inRange && styles.stepperInRange]}>
+              <Pressable testID="hyd-minus" onPress={() => step(() => setHydration(Math.max(50, hydration - 1)))} style={styles.stepBtn}>
+                <Icon name="remove" size={20} color={isIdealHydration ? COLORS.success : COLORS.brand} />
               </Pressable>
-            ))}
-          </ScrollView>
-
-          <Text style={[styles.label, { marginTop: SPACING.md }]}>{t.calc.roomTemp}</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
-            {ROOM_TEMPS.map((r) => (
-              <Pressable
-                key={r}
-                testID={`rt-${r}`}
-                onPress={() => setRoomTemp(r)}
-                style={[styles.chip, roomTemp === r && styles.chipActive]}
-              >
-                <Text style={[styles.chipText, roomTemp === r && styles.chipTextActive]}>{r}°C</Text>
+              <Text style={[styles.stepVal, isIdealHydration && { color: COLORS.success }]}>{hydration}%</Text>
+              <Pressable testID="hyd-plus" onPress={() => step(() => setHydration(Math.min(95, hydration + 1)))} style={styles.stepBtn}>
+                <Icon name="add" size={20} color={isIdealHydration ? COLORS.success : COLORS.brand} />
               </Pressable>
-            ))}
-          </ScrollView>
-        </View>
+            </View>
+          </View>
 
-        {/* 3. Oven */}
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>{t.calc.baking}</Text>
-          <View style={styles.ovenRow}>
-            <OvenCard active={oven === 'homeStone'} onPress={() => setOven('homeStone')} emoji="🧱" title={t.calc.homeStone} testID="oven-homeStone" />
-            <OvenCard active={oven === 'ooni'} onPress={() => setOven('ooni')} emoji="🍕" title={t.calc.ooni} testID="oven-ooni" />
-            <OvenCard active={oven === 'homePan'} onPress={() => setOven('homePan')} emoji="🥘" title={t.calc.homePan} testID="oven-homePan" />
+          <View style={[styles.row, { marginTop: SPACING.md }]}>
+            <Text style={styles.label}>{t.calc.roomTemp}</Text>
+            <View style={styles.stepper}>
+              <Pressable testID="rt-minus" onPress={() => step(() => setRoomTemp(Math.max(10, roomTemp - 1)))} style={styles.stepBtn}>
+                <Icon name="remove" size={20} color={COLORS.brand} />
+              </Pressable>
+              <Text style={styles.stepVal}>{roomTemp}°C</Text>
+              <Pressable testID="rt-plus" onPress={() => step(() => setRoomTemp(Math.min(35, roomTemp + 1)))} style={styles.stepBtn}>
+                <Icon name="add" size={20} color={COLORS.brand} />
+              </Pressable>
+            </View>
           </View>
         </View>
 
-        {/* Actions above recipe (mirroring apps that lead with intent) */}
-        <View style={styles.actionsRow}>
-          <Pressable testID="add-shopping" style={[styles.actionBtn, { backgroundColor: COLORS.surfaceSecondary, borderWidth: 1, borderColor: COLORS.border }]} onPress={onShopping}>
-            <Icon name="cart" size={18} color={COLORS.brand} />
-            <Text style={[styles.actionBtnText, { color: COLORS.brand }]}>{t.shopping.title}</Text>
+        {/* 4. MIXING */}
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>4 · {t.calc.mixingTitle}</Text>
+          <View style={styles.segmentedRow}>
+            <Pressable testID="mix-hand" onPress={() => step(() => setMixing('hand'))} style={[styles.segBtn, mixing === 'hand' && styles.segBtnActive]}>
+              <Icon name="hand-left" size={16} color={mixing === 'hand' ? '#fff' : COLORS.brand} />
+              <Text style={[styles.segText, mixing === 'hand' && { color: '#fff' }]}>{t.calc.handMixTitle}</Text>
+            </Pressable>
+            <Pressable testID="mix-mixer" onPress={() => step(() => setMixing('mixer'))} style={[styles.segBtn, mixing === 'mixer' && styles.segBtnActive]}>
+              <Icon name="cog" size={16} color={mixing === 'mixer' ? '#fff' : COLORS.brand} />
+              <Text style={[styles.segText, mixing === 'mixer' && { color: '#fff' }]}>{t.calc.mixerTitle}</Text>
+            </Pressable>
+          </View>
+          <Pressable testID="mix-toggle" onPress={() => setShowMixSteps(!showMixSteps)} style={styles.expandBtn}>
+            <Text style={styles.expandText}>{showMixSteps ? t.calc.hideSteps : t.calc.showSteps}</Text>
+            <Icon name={showMixSteps ? 'chevron-up' : 'chevron-down'} size={16} color={COLORS.brand} />
           </Pressable>
-          <Pressable testID="share-community" style={[styles.actionBtn, { backgroundColor: COLORS.brand }]} onPress={onShare}>
-            <Icon name="share" size={18} color="#fff" />
-            <Text style={[styles.actionBtnText, { color: '#fff' }]}>Podijeli na Zid</Text>
-          </Pressable>
+          {showMixSteps ? (
+            mixing === 'hand' ? (
+              <View style={styles.stepsBox}>
+                {t.calc.handMixSteps.map((s, i) => (
+                  <View key={i} style={styles.stepItem}>
+                    <View style={styles.stepNum}><Text style={styles.stepNumText}>{i + 1}</Text></View>
+                    <Text style={styles.stepText}>{s}</Text>
+                  </View>
+                ))}
+              </View>
+            ) : (
+              <View style={styles.stepsBox}>
+                {(['A', 'B', 'C', 'D'] as const).map((phase) => {
+                  const p = t.calc.mixerSteps[phase];
+                  return (
+                    <View key={phase} style={{ marginBottom: SPACING.md }}>
+                      <Text style={styles.phaseTitle}>{p.title}</Text>
+                      {p.steps.map((s, i) => (
+                        <View key={i} style={styles.stepItem}>
+                          <View style={styles.stepNum}><Text style={styles.stepNumText}>{i + 1}</Text></View>
+                          <Text style={styles.stepText}>{s}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  );
+                })}
+              </View>
+            )
+          ) : null}
         </View>
 
-        {/* More tools */}
-        <View style={styles.moreRow}>
-          <MoreLink icon="book" label={t.calc.school} onPress={() => setMoreTool('school')} testID="more-school" />
-          <MoreLink icon="restaurant-outline" label={t.calc.leftover} onPress={() => setMoreTool('leftover')} testID="more-leftover" />
+        {/* 5. BAKING */}
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>5 · {t.calc.baking}</Text>
+          <View style={styles.ovenRow}>
+            <OvenCard active={oven === 'homeStone'} onPress={() => step(() => setOven('homeStone'))} emoji="🧱" title={t.calc.homeStone} testID="oven-homeStone" />
+            <OvenCard active={oven === 'ooni'} onPress={() => step(() => setOven('ooni'))} emoji="🍕" title={t.calc.ooni} testID="oven-ooni" />
+            <OvenCard active={oven === 'homePan'} onPress={() => step(() => setOven('homePan'))} emoji="🥘" title={t.calc.homePan} testID="oven-homePan" />
+          </View>
+          <View style={styles.bakeInstructions}>
+            <View style={{ flexDirection: 'row', gap: SPACING.sm, alignItems: 'center' }}>
+              <Icon name="flame" size={16} color={COLORS.brand} />
+              <Text style={styles.bakeText}>{bakingTemp}</Text>
+            </View>
+            <Text style={styles.bakeBody}>{bakingSteps}</Text>
+          </View>
         </View>
 
-        {/* 4. Recipe result (realtime) - AT BOTTOM */}
+        {/* 6. RESULT - AT BOTTOM */}
         <View style={styles.recipeCard}>
-          <Text style={styles.recipeSection}>Za 1 pizzu · {diameter} cm</Text>
+          <Text style={styles.recipeSection}>6 · Za 1 pizzu · {diameter} cm</Text>
           <ResultRow label={t.calc.doughBall} value={`${dims.doughBall} g`} />
           <ResultRow label={t.calc.sauce} value={`${dims.sauce} g`} />
           <ResultRow label={t.calc.cheese} value={`${dims.cheese} g`} />
@@ -223,20 +290,22 @@ export default function CalculatorHome() {
           {dough.preferment ? (
             <>
               <Text style={[styles.recipeSection, { marginTop: SPACING.md }]}>
-                {t.calc.preferment} · {method === 'biga' ? 'Biga' : 'Poolish'}
+                {t.calc.preferment} · {method === 'biga' ? 'BIGA 50%' : 'POOLISH 35%'}
               </Text>
               <ResultRow label={t.calc.totalFlour} value={`${dough.preferment.flour} g`} highlight />
               <ResultRow label={t.calc.totalWater} value={`${dough.preferment.water} g`} highlight />
               <ResultRow label={t.calc.yeastAmount + ' (svježi)'} value={`${dough.preferment.yeast} g`} />
-              <Text style={styles.hint}>
-                {method === 'biga' ? '16-18h fermentacija na 18-20°C prije glavnog zamjesa' : '12-14h fermentacija na 18-20°C prije glavnog zamjesa'}
-              </Text>
+              {method === 'poolish' ? (
+                <Text style={styles.hint}>+ kap meda za bolju aktivaciju · 12-14h na 18-20°C</Text>
+              ) : (
+                <Text style={styles.hint}>16-18h fermentacija na 18-20°C prije glavnog zamjesa</Text>
+              )}
 
               <Text style={[styles.recipeSection, { marginTop: SPACING.md }]}>{t.calc.mainDough}</Text>
               <ResultRow label={t.calc.remainingFlour} value={`${dough.main.flour} g`} highlight />
               {ice ? (
                 <>
-                  <ResultRow label={t.calc.coldWater + ' (preostala)'} value={`${Math.max(0, dough.main.water - ice.ice)} g`} />
+                  <ResultRow label={`${t.calc.coldWater} (preostala)`} value={`${Math.max(0, dough.main.water - ice.ice)} g`} />
                   <ResultRow label={`🧊 ${t.calc.iceAmount}`} value={`${ice.ice} g`} highlight />
                 </>
               ) : (
@@ -244,13 +313,21 @@ export default function CalculatorHome() {
               )}
               <ResultRow label={t.calc.saltAmount} value={`${dough.main.salt} g`} />
               <ResultRow label={t.calc.oilAmount} value={`${dough.main.oil} g`} />
+
+              <View style={styles.subBlock}>
+                <Text style={styles.subhead}>{t.calc.totals} · {pizzas} × {dims.doughBall}g = {dough.totalDough}g</Text>
+                <ResultRow label={t.calc.totalFlour} value={`${dough.total.flour} g`} />
+                <ResultRow label={t.calc.totalWater} value={`${dough.total.water} g`} />
+                <ResultRow label={t.calc.saltAmount} value={`${dough.total.salt} g`} />
+                <ResultRow label={t.calc.yeastAmount} value={`${dough.total.yeast} g`} />
+              </View>
             </>
           ) : (
             <>
               <Text style={[styles.recipeSection, { marginTop: SPACING.md }]}>
                 Ukupno tijesto · {pizzas} × {dims.doughBall}g = {dough.totalDough}g
               </Text>
-              <ResultRow label="Brašno (00 / Tipo 0)" value={`${dough.main.flour} g`} highlight />
+              <ResultRow label={`Brašno (${flourProfile.label})`} value={`${dough.main.flour} g`} highlight />
               {ice ? (
                 <>
                   <ResultRow label={t.calc.coldWater} value={`${ice.water} g`} />
@@ -264,28 +341,24 @@ export default function CalculatorHome() {
               <ResultRow label={t.calc.oilAmount} value={`${dough.main.oil} g`} />
             </>
           )}
+        </View>
 
-          {dough.preferment ? (
-            <View style={styles.subBlock}>
-              <Text style={styles.subhead}>{t.calc.totals} · {pizzas} × {dims.doughBall}g = {dough.totalDough}g</Text>
-              <ResultRow label={t.calc.totalFlour} value={`${dough.total.flour} g`} />
-              <ResultRow label={t.calc.totalWater} value={`${dough.total.water} g`} />
-              <ResultRow label={t.calc.saltAmount} value={`${dough.total.salt} g`} />
-              <ResultRow label={t.calc.yeastAmount} value={`${dough.total.yeast} g`} />
-            </View>
-          ) : null}
+        {/* 7. ACTIONS */}
+        <View style={styles.actionsRow}>
+          <Pressable testID="add-shopping" style={[styles.actionBtn, { backgroundColor: COLORS.surfaceSecondary, borderWidth: 1, borderColor: COLORS.border }]} onPress={onShopping}>
+            <Icon name="cart" size={18} color={COLORS.brand} />
+            <Text style={[styles.actionBtnText, { color: COLORS.brand }]}>{t.shopping.title}</Text>
+          </Pressable>
+          <Pressable testID="share-community" style={[styles.actionBtn, { backgroundColor: COLORS.brand }]} onPress={onShare}>
+            <Icon name="share" size={18} color="#fff" />
+            <Text style={[styles.actionBtnText, { color: '#fff' }]}>Podijeli na Zid</Text>
+          </Pressable>
+        </View>
 
-          <View style={styles.bakeInfo}>
-            <Icon name="flame" size={16} color={COLORS.brand} />
-            <Text style={styles.bakeText}>{baking.temp} · {baking.time}</Text>
-          </View>
-
-          {hydration > 70 ? (
-            <View style={styles.warnBox}>
-              <Icon name="alert-circle" size={14} color={COLORS.warning} />
-              <Text style={styles.warnText}>{t.calc.hydrationWarning}</Text>
-            </View>
-          ) : null}
+        {/* Footer links */}
+        <View style={styles.moreRow}>
+          <MoreLink icon="book" label={t.calc.school} onPress={() => setMoreTool('school')} testID="more-school" />
+          <MoreLink icon="restaurant-outline" label={t.calc.leftover} onPress={() => setMoreTool('leftover')} testID="more-leftover" />
         </View>
 
       </ScrollView>
@@ -383,6 +456,7 @@ function ShoppingModal({ onClose }: { onClose: () => void }) {
   const { t } = useT();
   const [recipe, setRecipe] = useState<any>(null);
   const [copied, setCopied] = useState(false);
+  const [checked, setChecked] = useState<Record<string, boolean>>({});
 
   useMemo(() => {
     AsyncStorage.getItem('lastRecipe').then((v) => { if (v) setRecipe(JSON.parse(v)); });
@@ -397,25 +471,25 @@ function ShoppingModal({ onClose }: { onClose: () => void }) {
   }
 
   const items = [
-    { qty: `${recipe.flour} g`, name: `Brašno ${recipe.flourType || '00'}` },
-    { qty: `${recipe.water} g`, name: 'Voda' },
-    { qty: `${recipe.salt} g`, name: 'Sol' },
-    { qty: `${recipe.yeast} g`, name: 'Kvasac' },
-    ...(recipe.oil > 0 ? [{ qty: `${recipe.oil} g`, name: 'Maslinovo ulje' }] : []),
+    { key: 'flour', qty: `${recipe.flour} g`, name: `Brašno (${recipe.flourType || '00'})` },
+    { key: 'water', qty: `${recipe.water} g`, name: 'Voda' },
+    { key: 'salt', qty: `${recipe.salt} g`, name: 'Sol' },
+    { key: 'yeast', qty: `${recipe.yeast} g`, name: 'Kvasac' },
+    ...(recipe.oil > 0 ? [{ key: 'oil', qty: `${recipe.oil} g`, name: 'Maslinovo ulje' }] : []),
+    ...(recipe.sauce ? [{ key: 'sauce', qty: `${recipe.sauce} g`, name: 'Pelat / rajčica' }] : []),
+    ...(recipe.cheese ? [{ key: 'cheese', qty: `${recipe.cheese} g`, name: 'Mozzarella / Fior di Latte' }] : []),
   ];
 
   const listText = `Pizzabook - Recept za ${recipe.pizzas} pizze:\n\n` +
-    items.map((it) => `• ${it.qty} — ${it.name}`).join('\n') +
-    '\n\n' + t.shopping.extras + ':\n' +
-    t.shopping.extrasList.map((x) => `• ${x}`).join('\n');
+    items.map((it) => `☐ ${it.qty} — ${it.name}`).join('\n');
 
   const doCopy = async () => {
     try {
       if (Platform.OS === 'web') {
         await navigator.clipboard.writeText(listText);
       } else {
-        const { setStringAsync } = await import('expo-clipboard').catch(() => ({ setStringAsync: null as any }));
-        if (setStringAsync) await setStringAsync(listText);
+        const clip = await import('expo-clipboard').catch(() => null);
+        if (clip?.setStringAsync) await clip.setStringAsync(listText);
       }
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
@@ -429,15 +503,17 @@ function ShoppingModal({ onClose }: { onClose: () => void }) {
         <Text style={{ color: COLORS.muted, fontSize: 13 }}>{t.shopping.subtitle}</Text>
         <View style={styles.recipeCard}>
           <Text style={styles.recipeSection}>Za {recipe.pizzas} pizze · {recipe.hydration}% · {recipe.method}</Text>
-          {items.map((it, i) => (<ResultRow key={i} label={it.name} value={it.qty} />))}
-        </View>
-        <View style={styles.recipeCard}>
-          <Text style={styles.recipeSection}>{t.shopping.extras}</Text>
-          {t.shopping.extrasList.map((x, i) => (
-            <View key={i} style={styles.extraRow}>
-              <Icon name="checkmark-circle" size={16} color={COLORS.brand} />
-              <Text style={styles.extraText}>{x}</Text>
-            </View>
+          {items.map((it) => (
+            <Pressable
+              key={it.key}
+              testID={`shop-${it.key}`}
+              style={styles.checkRow}
+              onPress={() => setChecked({ ...checked, [it.key]: !checked[it.key] })}
+            >
+              <Icon name={checked[it.key] ? 'checkbox' : 'square-outline'} size={22} color={checked[it.key] ? COLORS.brand : COLORS.muted} />
+              <Text style={[styles.checkLabel, checked[it.key] && { textDecorationLine: 'line-through', color: COLORS.muted }]}>{it.name}</Text>
+              <Text style={[styles.checkQty, checked[it.key] && { color: COLORS.muted }]}>{it.qty}</Text>
+            </Pressable>
           ))}
         </View>
         <Pressable style={styles.copyBtn} onPress={doCopy} testID="copy-shopping-btn">
@@ -461,18 +537,27 @@ const styles = StyleSheet.create({
   cardTitle: { fontSize: 13, color: COLORS.brand, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: SPACING.sm },
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   label: { fontSize: 13, color: COLORS.muted, fontWeight: '600' },
+  subLabel: { fontSize: 11, color: COLORS.muted, marginTop: 2 },
+
+  flourGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.sm },
+  flourCard: { flexBasis: '48%', flexGrow: 1, padding: SPACING.md, borderRadius: RADIUS.md, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border, alignItems: 'center', gap: 4 },
+  flourCardActive: { backgroundColor: COLORS.brand, borderColor: COLORS.brand },
+  flourEmoji: { fontSize: 24 },
+  flourLabel: { fontSize: 12, fontWeight: '700', color: COLORS.onSurface, textAlign: 'center' },
+  flourRange: { fontSize: 10, color: COLORS.muted, fontWeight: '600' },
 
   stepper: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md, backgroundColor: COLORS.surface, borderRadius: RADIUS.pill, paddingHorizontal: 4, borderWidth: 1, borderColor: COLORS.border },
-  stepBtn: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
-  stepVal: { fontSize: 18, fontWeight: '800', color: COLORS.onSurface, minWidth: 32, textAlign: 'center' },
+  stepperIdeal: { borderColor: COLORS.success, backgroundColor: '#DCFCE7' },
+  stepperInRange: { borderColor: COLORS.brand },
+  stepBtn: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
+  stepVal: { fontSize: 16, fontWeight: '800', color: COLORS.onSurface, minWidth: 42, textAlign: 'center' },
 
   chipRow: { gap: SPACING.sm, paddingRight: SPACING.md },
   chip: { paddingHorizontal: SPACING.md, height: 36, borderRadius: RADIUS.pill, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
   chipActive: { backgroundColor: COLORS.brand, borderColor: COLORS.brand },
   chipText: { color: COLORS.onSurface, fontSize: 13, fontWeight: '600' },
   chipTextActive: { color: '#fff' },
-  customWrap: { justifyContent: 'center', flexShrink: 0 },
-  customInput: { minWidth: 60, height: 36, borderRadius: RADIUS.pill, borderWidth: 1, borderColor: COLORS.borderStrong, borderStyle: 'dashed', paddingHorizontal: SPACING.md, fontSize: 13, color: COLORS.onSurface, textAlign: 'center' },
+  customInput: { minWidth: 64, height: 36, borderRadius: RADIUS.pill, borderWidth: 1, borderColor: COLORS.borderStrong, borderStyle: 'dashed', paddingHorizontal: SPACING.md, fontSize: 13, color: COLORS.onSurface, textAlign: 'center' },
 
   pillGroup: { flexDirection: 'row', gap: SPACING.sm },
   pill: { flex: 1, paddingVertical: 10, borderRadius: RADIUS.md, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border, alignItems: 'center' },
@@ -480,11 +565,29 @@ const styles = StyleSheet.create({
   pillText: { color: COLORS.onSurface, fontSize: 14, fontWeight: '700' },
   pillTextActive: { color: '#fff' },
 
+  hydRow: { flexDirection: 'row', gap: SPACING.md, alignItems: 'flex-end', marginTop: SPACING.md },
+
+  segmentedRow: { flexDirection: 'row', gap: 4, padding: 4, backgroundColor: COLORS.surface, borderRadius: RADIUS.md, borderWidth: 1, borderColor: COLORS.border },
+  segBtn: { flex: 1, flexDirection: 'row', gap: 6, alignItems: 'center', justifyContent: 'center', paddingVertical: 10, borderRadius: RADIUS.sm },
+  segBtnActive: { backgroundColor: COLORS.brand },
+  segText: { color: COLORS.onSurface, fontSize: 13, fontWeight: '700' },
+  expandBtn: { flexDirection: 'row', gap: 6, alignItems: 'center', justifyContent: 'center', paddingVertical: 10 },
+  expandText: { color: COLORS.brand, fontSize: 13, fontWeight: '700' },
+  stepsBox: { gap: SPACING.sm, paddingTop: SPACING.sm },
+  stepItem: { flexDirection: 'row', gap: SPACING.md, alignItems: 'flex-start', marginBottom: 6 },
+  stepNum: { width: 22, height: 22, borderRadius: 11, backgroundColor: COLORS.brand, alignItems: 'center', justifyContent: 'center', marginTop: 2 },
+  stepNumText: { color: '#fff', fontSize: 11, fontWeight: '800' },
+  stepText: { flex: 1, color: COLORS.onSurface, fontSize: 13, lineHeight: 19 },
+  phaseTitle: { fontSize: 13, color: COLORS.brand, fontWeight: '800', marginBottom: SPACING.sm, textTransform: 'uppercase' },
+
   ovenRow: { flexDirection: 'row', gap: SPACING.sm },
   ovenCard: { flex: 1, paddingVertical: SPACING.md, paddingHorizontal: SPACING.sm, borderRadius: RADIUS.md, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border, alignItems: 'center', gap: 6, minHeight: 88 },
   ovenCardActive: { backgroundColor: COLORS.brand, borderColor: COLORS.brand },
   ovenEmoji: { fontSize: 30 },
   ovenText: { color: COLORS.onSurface, fontSize: 11, fontWeight: '700', textAlign: 'center' },
+  bakeInstructions: { marginTop: SPACING.md, gap: SPACING.sm, paddingTop: SPACING.md, borderTopWidth: 1, borderTopColor: COLORS.divider },
+  bakeText: { fontSize: 14, color: COLORS.onSurface, fontWeight: '700' },
+  bakeBody: { fontSize: 13, color: COLORS.onSurfaceTertiary, lineHeight: 19 },
 
   recipeCard: { backgroundColor: COLORS.surfaceSecondary, padding: SPACING.lg, borderRadius: RADIUS.lg, borderWidth: 1, borderColor: COLORS.border, gap: 4 },
   recipeSection: { fontSize: 13, color: COLORS.brand, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6, marginTop: 4 },
@@ -494,10 +597,6 @@ const styles = StyleSheet.create({
   subBlock: { marginTop: SPACING.md, gap: 4, paddingTop: SPACING.sm, borderTopWidth: 2, borderTopColor: COLORS.brand },
   subhead: { fontSize: 12, color: COLORS.brand, fontWeight: '800', textTransform: 'uppercase', marginBottom: 4 },
   hint: { fontSize: 12, color: COLORS.muted, fontStyle: 'italic', marginTop: 4, marginBottom: 4 },
-  bakeInfo: { flexDirection: 'row', gap: SPACING.sm, alignItems: 'center', marginTop: SPACING.md, paddingTop: SPACING.md, borderTopWidth: 1, borderTopColor: COLORS.divider },
-  bakeText: { fontSize: 14, color: COLORS.onSurface, fontWeight: '700' },
-  warnBox: { flexDirection: 'row', gap: SPACING.sm, alignItems: 'flex-start', backgroundColor: '#FEF3C7', padding: SPACING.md, borderRadius: RADIUS.md, marginTop: SPACING.md },
-  warnText: { flex: 1, color: COLORS.onSurface, fontSize: 12 },
 
   actionsRow: { flexDirection: 'row', gap: SPACING.sm },
   actionBtn: { flex: 1, flexDirection: 'row', gap: SPACING.sm, alignItems: 'center', justifyContent: 'center', paddingVertical: 14, borderRadius: RADIUS.md },
@@ -513,8 +612,9 @@ const styles = StyleSheet.create({
   ruleCard: { flexDirection: 'row', gap: SPACING.md, backgroundColor: COLORS.surfaceSecondary, padding: SPACING.lg, borderRadius: RADIUS.lg, borderWidth: 1, borderColor: COLORS.border },
   ruleTitle: { fontSize: 15, fontWeight: '800', color: COLORS.onSurface, marginBottom: 4 },
   ruleBody: { fontSize: 14, color: COLORS.onSurfaceTertiary, lineHeight: 20 },
-  extraRow: { flexDirection: 'row', gap: SPACING.sm, alignItems: 'center', paddingVertical: 6 },
-  extraText: { color: COLORS.onSurface, fontSize: 14 },
   copyBtn: { flexDirection: 'row', gap: SPACING.sm, alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.brand, paddingVertical: 14, borderRadius: RADIUS.md, marginTop: SPACING.sm },
   copyBtnText: { color: '#fff', fontSize: 15, fontWeight: '700' },
+  checkRow: { flexDirection: 'row', gap: SPACING.md, alignItems: 'center', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: COLORS.divider },
+  checkLabel: { flex: 1, color: COLORS.onSurface, fontSize: 14 },
+  checkQty: { color: COLORS.brand, fontSize: 14, fontWeight: '700' },
 });

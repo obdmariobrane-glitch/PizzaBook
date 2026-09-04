@@ -5,16 +5,47 @@ export type Mixing = 'hand' | 'home' | 'spiral';
 export type Fermentation = 'sameDay' | 'coldLong';
 export type OvenType = 'ooni' | 'homeStone' | 'homePan';
 
+export type FlourType = 'caputo00' | 'manitoba' | 'spelt' | 'wholeWheat' | 'glutenFree';
+
+export const FLOUR_PROFILES: Record<FlourType, { label: string; ideal: number; min: number; max: number }> = {
+  caputo00: { label: 'Caputo 00 / Tipo 0', ideal: 68, min: 65, max: 70 },
+  manitoba: { label: 'Manitoba / High W', ideal: 75, min: 70, max: 80 },
+  spelt: { label: 'Pirovo / Spelt', ideal: 62, min: 60, max: 65 },
+  wholeWheat: { label: 'Integralno', ideal: 72, min: 70, max: 75 },
+  glutenFree: { label: 'Bezglutensko', ideal: 80, min: 75, max: 85 },
+};
+
+// Exact normative table per pizza diameter (from spec)
+const DIMENSION_TABLE: Record<number, { ball: number; sauce: number; cheese: number }> = {
+  26: { ball: 220, sauce: 70, cheese: 75 },
+  28: { ball: 240, sauce: 80, cheese: 85 },
+  30: { ball: 260, sauce: 85, cheese: 90 },
+  33: { ball: 280, sauce: 95, cheese: 100 },
+  35: { ball: 310, sauce: 105, cheese: 110 },
+  40: { ball: 380, sauce: 130, cheese: 140 },
+};
+
 export function dimensionsCalc(diameter: number, pizzas: number) {
-  // baseline: 30cm -> 250g dough. Area-scale for other sizes.
+  // Use exact table when known; otherwise scale from nearest entry
+  const exact = DIMENSION_TABLE[diameter];
+  if (exact) {
+    return {
+      doughBall: exact.ball,
+      sauce: exact.sauce,
+      cheese: exact.cheese,
+      totalDough: exact.ball * pizzas,
+    };
+  }
+  // Scale from 30cm as baseline
+  const base = DIMENSION_TABLE[30];
   const area = Math.PI * (diameter / 2) ** 2;
   const baseArea = Math.PI * 15 * 15;
   const factor = area / baseArea;
   return {
-    doughBall: Math.round(250 * factor),
-    sauce: Math.round(85 * factor),
-    cheese: Math.round(90 * factor),
-    totalDough: Math.round(250 * factor * pizzas),
+    doughBall: Math.round(base.ball * factor),
+    sauce: Math.round(base.sauce * factor),
+    cheese: Math.round(base.cheese * factor),
+    totalDough: Math.round(base.ball * factor) * pizzas,
   };
 }
 
