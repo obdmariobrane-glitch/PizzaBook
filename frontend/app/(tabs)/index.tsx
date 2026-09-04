@@ -399,7 +399,12 @@ export default function CalculatorHome() {
               { k: 'biga' as const, l: t.calc.biga },
               { k: 'poolish' as const, l: t.calc.poolish },
             ].map((m) => (
-              <Pressable key={m.k} testID={`method-${m.k}`} onPress={() => step(() => setMethod(m.k))} style={[styles.pill, method === m.k && styles.pillActive]}>
+              <Pressable
+                key={m.k}
+                testID={`method-${m.k}`}
+                onPress={() => { try { Haptics.selectionAsync(); } catch {}; setMethod(m.k); setShowMixSteps(true); }}
+                style={[styles.pill, method === m.k && styles.pillActive]}
+              >
                 <Text style={[styles.pillText, method === m.k && styles.pillTextActive]}>{m.l}</Text>
               </Pressable>
             ))}

@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, Platform } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, Platform, TextInput } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from '@react-native-vector-icons/ionicons';
+import DateTimePicker from '@react-native-community/datetimepicker';
 
 import { useT } from '../../src/i18n/LanguageProvider';
 import { COLORS, SPACING, RADIUS } from '../../src/theme';
@@ -14,12 +15,32 @@ function fmt(d: Date) {
   return `${day} · ${time}`;
 }
 
+function pad(n: number) { return String(n).padStart(2, '0'); }
+
 export default function Planner() {
   const insets = useSafeAreaInsets();
   const { t } = useT();
   const [method, setMethod] = useState<Method>('direct');
   const [bakeAt, setBakeAt] = useState<Date | null>(null);
   const [steps, setSteps] = useState<any[]>([]);
+
+  // Native picker state (iOS/Android)
+  const [pickerMode, setPickerMode] = useState<null | 'date' | 'time'>(null);
+  const [pickerDraft, setPickerDraft] = useState<Date>(() => {
+    const d = new Date();
+    d.setHours(19, 0, 0, 0);
+    d.setDate(d.getDate() + 1);
+    return d;
+  });
+
+  // Web-only: text inputs (native picker doesn't render on web)
+  const initial = new Date();
+  initial.setHours(19, 0, 0, 0);
+  initial.setDate(initial.getDate() + 1);
+  const [webDate, setWebDate] = useState<string>(
+    `${initial.getFullYear()}-${pad(initial.getMonth() + 1)}-${pad(initial.getDate())}`
+  );
+  const [webTime, setWebTime] = useState<string>(`${pad(initial.getHours())}:${pad(initial.getMinutes())}`);
 
   // Preset options for "when to bake"
   const now = new Date();
@@ -50,6 +71,48 @@ export default function Planner() {
     }
   };
 
+  const openDatePicker = () => {
+    if (Platform.OS === 'web') return; // web uses inline text inputs
+    setPickerDraft(bakeAt ?? pickerDraft);
+    setPickerMode('date');
+  };
+
+  const onPickerChange = (event: any, selected?: Date) => {
+    // Android: closes immediately after pick; iOS: keeps open
+    const type = event?.type;
+    if (Platform.OS === 'android') {
+      setPickerMode(null);
+      if (type === 'dismissed') return;
+    }
+    if (selected) {
+      setPickerDraft(selected);
+      if (Platform.OS === 'android') {
+        if (pickerMode === 'date') {
+          // After date is picked, immediately open time picker
+          setTimeout(() => setPickerMode('time'), 100);
+        } else {
+          generate(selected);
+        }
+      }
+    }
+  };
+
+  const iosConfirm = () => {
+    setPickerMode(null);
+    generate(pickerDraft);
+  };
+
+  // Web: build Date from inputs and generate
+  const applyWebDateTime = () => {
+    // Parse YYYY-MM-DD and HH:MM
+    const [y, m, d] = webDate.split('-').map((x) => parseInt(x, 10));
+    const [hh, mm] = webTime.split(':').map((x) => parseInt(x, 10));
+    if (!y || !m || !d || isNaN(hh) || isNaN(mm)) return;
+    const dt = new Date(y, m - 1, d, hh, mm, 0, 0);
+    if (isNaN(dt.getTime())) return;
+    generate(dt);
+  };
+
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
       <View style={styles.header}><Text style={styles.title}>{t.planner.title}</Text></View>
@@ -65,7 +128,7 @@ export default function Planner() {
               <Pressable
                 key={m.key}
                 testID={`planner-method-${m.key}`}
-                onPress={() => { setMethod(m.key); if (bakeAt) generate(bakeAt); }}
+                onPress={() => { setMethod(m.key); if (bakeAt) setSteps(reversePlan(bakeAt, m.key)); }}
                 style={[styles.chip, method === m.key && styles.chipActive]}
               >
                 <Text style={[styles.chipText, method === m.key && { color: '#fff' }]}>{m.l}</Text>
@@ -74,8 +137,85 @@ export default function Planner() {
           </View>
         </View>
 
+        {/* Custom date+time entry */}
         <View style={styles.card}>
-          <Text style={styles.label}>{t.planner.when}</Text>
+          <Text style={styles.label}>Odaberi točan datum i vrijeme pečenja</Text>
+
+          {Platform.OS === 'web' ? (
+            <View style={{ gap: SPACING.sm }}>
+              <View style={styles.row}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.microLabel}>Datum</Text>
+                  <TextInput
+                    testID="web-date"
+                    // @ts-expect-error web-only prop
+                    type="date"
+                    value={webDate}
+                    onChangeText={setWebDate}
+                    style={styles.textInput}
+                  />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.microLabel}>Vrijeme</Text>
+                  <TextInput
+                    testID="web-time"
+                    // @ts-expect-error web-only prop
+                    type="time"
+                    value={webTime}
+                    onChangeText={setWebTime}
+                    style={styles.textInput}
+                  />
+                </View>
+              </View>
+              <Pressable testID="web-apply" onPress={applyWebDateTime} style={styles.primaryBtn}>
+                <Icon name="calendar" size={16} color="#fff" />
+                <Text style={styles.primaryBtnText}>Generiraj plan</Text>
+              </Pressable>
+            </View>
+          ) : (
+            <Pressable testID="open-datepicker" onPress={openDatePicker} style={styles.dateBtn}>
+              <Icon name="calendar-outline" size={20} color={COLORS.brand} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.dateBtnLabel}>{bakeAt ? fmt(bakeAt) : 'Dodirni za odabir datuma i vremena'}</Text>
+                <Text style={styles.dateBtnSub}>{bakeAt ? 'Dodirni za promjenu' : 'Otvara se sustavski birač'}</Text>
+              </View>
+              <Icon name="chevron-forward" size={20} color={COLORS.muted} />
+            </Pressable>
+          )}
+
+          {pickerMode ? (
+            <View>
+              <DateTimePicker
+                value={pickerDraft}
+                mode={pickerMode}
+                is24Hour
+                minimumDate={new Date()}
+                display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                onChange={onPickerChange}
+              />
+              {Platform.OS === 'ios' ? (
+                <View style={styles.iosRow}>
+                  <Pressable onPress={() => setPickerMode(null)} style={[styles.iosBtn, { backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border }]}>
+                    <Text style={[styles.iosBtnText, { color: COLORS.onSurface }]}>Odustani</Text>
+                  </Pressable>
+                  {pickerMode === 'date' ? (
+                    <Pressable onPress={() => setPickerMode('time')} style={[styles.iosBtn, { backgroundColor: COLORS.brand }]}>
+                      <Text style={styles.iosBtnText}>Dalje na vrijeme</Text>
+                    </Pressable>
+                  ) : (
+                    <Pressable onPress={iosConfirm} style={[styles.iosBtn, { backgroundColor: COLORS.brand }]}>
+                      <Text style={styles.iosBtnText}>Potvrdi</Text>
+                    </Pressable>
+                  )}
+                </View>
+              ) : null}
+            </View>
+          ) : null}
+        </View>
+
+        {/* Quick presets */}
+        <View style={styles.card}>
+          <Text style={styles.label}>Ili brze prečice</Text>
           <View style={{ gap: SPACING.sm }}>
             {presets.map((p, i) => (
               <Pressable
@@ -84,7 +224,7 @@ export default function Planner() {
                 onPress={() => generate(p.date)}
                 style={[styles.optRow, bakeAt?.getTime() === p.date.getTime() && styles.optRowActive]}
               >
-                <Icon name="calendar" size={18} color={COLORS.brand} />
+                <Icon name="flash" size={18} color={COLORS.brand} />
                 <Text style={styles.optText}>{p.label}</Text>
               </Pressable>
             ))}
@@ -128,10 +268,21 @@ const styles = StyleSheet.create({
   title: { fontSize: 28, fontWeight: '800', color: COLORS.onSurface, letterSpacing: -0.5 },
   card: { backgroundColor: COLORS.surfaceSecondary, padding: SPACING.lg, borderRadius: RADIUS.lg, borderWidth: 1, borderColor: COLORS.border, gap: SPACING.md },
   label: { fontSize: 13, color: COLORS.muted, fontWeight: '700', textTransform: 'uppercase' },
+  microLabel: { fontSize: 11, color: COLORS.muted, fontWeight: '700', textTransform: 'uppercase', marginBottom: 4 },
   chipRow: { flexDirection: 'row', gap: SPACING.sm, flexWrap: 'wrap' },
-  chip: { paddingHorizontal: SPACING.md, height: 36, borderRadius: RADIUS.pill, borderWidth: 1, borderColor: COLORS.border, alignItems: 'center', justifyContent: 'center' },
+  chip: { paddingHorizontal: SPACING.md, height: 40, borderRadius: RADIUS.pill, borderWidth: 1, borderColor: COLORS.border, alignItems: 'center', justifyContent: 'center', minWidth: 90 },
   chipActive: { backgroundColor: COLORS.brand, borderColor: COLORS.brand },
   chipText: { color: COLORS.onSurface, fontSize: 13, fontWeight: '600' },
+  row: { flexDirection: 'row', gap: SPACING.md },
+  textInput: { borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.surface, borderRadius: RADIUS.md, paddingHorizontal: SPACING.md, paddingVertical: 10, fontSize: 15, color: COLORS.onSurface },
+  primaryBtn: { flexDirection: 'row', gap: SPACING.sm, alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.brand, paddingVertical: 12, borderRadius: RADIUS.md, marginTop: 4 },
+  primaryBtnText: { color: '#fff', fontSize: 14, fontWeight: '700' },
+  dateBtn: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md, padding: SPACING.md, backgroundColor: COLORS.surface, borderRadius: RADIUS.md, borderWidth: 1, borderColor: COLORS.border },
+  dateBtnLabel: { color: COLORS.onSurface, fontSize: 15, fontWeight: '700' },
+  dateBtnSub: { color: COLORS.muted, fontSize: 12, marginTop: 2 },
+  iosRow: { flexDirection: 'row', gap: SPACING.sm, marginTop: SPACING.sm },
+  iosBtn: { flex: 1, paddingVertical: 12, borderRadius: RADIUS.md, alignItems: 'center' },
+  iosBtnText: { color: '#fff', fontSize: 14, fontWeight: '700' },
   optRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md, padding: SPACING.md, backgroundColor: COLORS.surface, borderRadius: RADIUS.md, borderWidth: 1, borderColor: COLORS.border },
   optRowActive: { borderColor: COLORS.brand, backgroundColor: COLORS.brandTertiary },
   optText: { color: COLORS.onSurface, fontSize: 14 },
