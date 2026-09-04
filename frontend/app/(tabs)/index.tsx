@@ -56,6 +56,7 @@ export default function CalculatorHome() {
   const [moreTool, setMoreTool] = useState<null | 'school' | 'leftover' | 'shopping'>(null);
   const [completedSteps, setCompletedSteps] = useState<Record<string, boolean>>({});
   const [flourInfo, setFlourInfo] = useState<null | { label: string; info: string }>(null);
+  const [flourExpanded, setFlourExpanded] = useState(false);
   const [activeTimers, setActiveTimers] = useState<Record<string, { endsAt: number; label: string; notifId?: string | null }>>({});
   const alertedRef = useRef<Set<string>>(new Set());
   // ticker: force re-render each second for countdowns AND check for expired timers
@@ -267,35 +268,48 @@ export default function CalculatorHome() {
 
       <ScrollView contentContainerStyle={{ padding: SPACING.lg, paddingBottom: SPACING.xxxl * 2, gap: SPACING.lg }} keyboardShouldPersistTaps="handled">
 
-        {/* 1. FLOUR - compact single-row list */}
+        {/* 1. FLOUR - collapsed header, expands on tap, auto-closes on select */}
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>1 · {t.calc.flourType}</Text>
-          <View style={{ gap: 6 }}>
-            {FLOURS.map((f) => {
-              const active = flour === f.key;
-              return (
-                <View key={f.key} style={styles.flourRowWrap}>
-                  <Pressable testID={`flour-${f.key}`} onPress={() => changeFlour(f.key)} style={[styles.flourCompact, active && styles.flourCompactActive]}>
-                    <Text style={[styles.flourCompactLabel, active && { color: '#fff' }]} numberOfLines={1}>{f.label}</Text>
-                    <Text style={[styles.flourCompactSuffix, active && { color: 'rgba(255,255,255,0.9)' }]} numberOfLines={1}>— {f.suffix}</Text>
-                    {active ? <Icon name="checkmark-circle" size={16} color="#fff" style={{ marginLeft: 4 }} /> : null}
-                  </Pressable>
-                  {f.info ? (
-                    <Pressable
-                      testID={`flour-info-${f.key}`}
-                      onPress={() => setFlourInfo({ label: f.label, info: f.info! })}
-                      hitSlop={8}
-                      style={styles.infoBtn}
-                    >
-                      <Icon name="information-circle-outline" size={18} color={active ? '#fff' : COLORS.muted} />
-                    </Pressable>
-                  ) : null}
-                </View>
-              );
-            })}
-          </View>
+          <Pressable
+            testID="flour-header"
+            onPress={() => setFlourExpanded((v) => !v)}
+            style={styles.flourHeader}
+          >
+            <Text style={styles.flourHeaderText}>Vrste brašna</Text>
+            <Icon name={flourExpanded ? 'chevron-up' : 'chevron-down'} size={20} color={COLORS.brand} />
+          </Pressable>
 
-          {/* Blend controls appear reactively when custom is selected */}
+          {flourExpanded ? (
+            <View style={{ gap: 6, marginTop: SPACING.md }}>
+              {FLOURS.map((f) => {
+                const active = flour === f.key;
+                return (
+                  <View key={f.key} style={styles.flourRowWrap}>
+                    <Pressable
+                      testID={`flour-${f.key}`}
+                      onPress={() => { changeFlour(f.key); setFlourExpanded(false); }}
+                      style={[styles.flourCompact, active && styles.flourCompactActive]}
+                    >
+                      <Text style={[styles.flourCompactLabel, active && { color: '#fff' }]} numberOfLines={1}>{f.label}</Text>
+                      {active ? <Icon name="checkmark-circle" size={16} color="#fff" style={{ marginLeft: 4 }} /> : null}
+                    </Pressable>
+                    {f.info ? (
+                      <Pressable
+                        testID={`flour-info-${f.key}`}
+                        onPress={() => setFlourInfo({ label: f.label, info: f.info! })}
+                        hitSlop={8}
+                        style={styles.infoBtn}
+                      >
+                        <Icon name="information-circle-outline" size={18} color={active ? COLORS.brand : COLORS.muted} />
+                      </Pressable>
+                    ) : null}
+                  </View>
+                );
+              })}
+            </View>
+          ) : null}
+
+          {/* Blend controls stay visible when custom is selected, even if the list is collapsed */}
           {isCustom ? (
             <View style={styles.blendPanel}>
               <Text style={styles.blendTitle}>Sastav mješavine</Text>
@@ -615,10 +629,6 @@ export default function CalculatorHome() {
           <ResultRow label={t.calc.doughBall} value={`${dims.doughBall} g`} />
           <ResultRow label={t.calc.sauce} value={`${dims.sauce} g`} />
           <ResultRow label={t.calc.cheese} value={`${dims.cheese} g`} />
-
-          <Text style={styles.hint}>
-            🧪 Kvasac dinamički izračunat: {dough.yeastPct}% (E_total ≈ {dough.eTotal}h) · {roomHours}h@{roomTemp}°C + {fridgeHours}h@{fridgeTemp}°C
-          </Text>
         </View>
 
         {/* 7. ACTIONS */}
@@ -640,6 +650,37 @@ export default function CalculatorHome() {
         </View>
 
       </ScrollView>
+
+      {/* Floating active-timers bar */}
+      {Object.keys(activeTimers).length > 0 ? (
+        <View style={[styles.floatingTimers, { bottom: insets.bottom + 70 }]} pointerEvents="box-none">
+          <View style={styles.floatingTimersInner}>
+            <Icon name="alarm" size={16} color={COLORS.brand} />
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6, alignItems: 'center', paddingRight: 6 }}>
+              {Object.entries(activeTimers).map(([key, val]) => {
+                const remaining = val.endsAt - Date.now();
+                return (
+                  <Pressable
+                    key={key}
+                    testID={`floating-timer-${key}`}
+                    onPress={() => {
+                      const idx = key.lastIndexOf('-');
+                      const pk = key.substring(0, idx);
+                      const tid = key.substring(idx + 1);
+                      stopTimer(pk, tid);
+                    }}
+                    style={styles.floatingChip}
+                  >
+                    <Text style={styles.floatingChipLabel} numberOfLines={1}>{val.label}</Text>
+                    <Text style={styles.floatingChipTime}>{formatCountdown(remaining)}</Text>
+                    <Icon name="close" size={12} color="#fff" />
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+          </View>
+        </View>
+      ) : null}
 
       <Modal visible={!!moreTool} animationType="slide" onRequestClose={() => setMoreTool(null)}>
         {moreTool === 'school' && <SchoolModal onClose={() => setMoreTool(null)} />}
@@ -919,6 +960,8 @@ const styles = StyleSheet.create({
   flourRowSub: { fontSize: 11, color: COLORS.muted, marginTop: 2, fontStyle: 'italic' },
   flourRowRange: { fontSize: 12, color: COLORS.muted, fontWeight: '600', marginTop: 2 },
   // NEW compact single-line flour row
+  flourHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 4 },
+  flourHeaderText: { fontSize: 15, fontWeight: '700', color: COLORS.onSurface },
   flourRowWrap: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   flourCompact: { flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: SPACING.md, paddingVertical: 10, borderRadius: RADIUS.md, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border, minHeight: 42 },
   flourCompactActive: { backgroundColor: COLORS.brand, borderColor: COLORS.brand },
@@ -936,6 +979,12 @@ const styles = StyleSheet.create({
   timerChipActive: { backgroundColor: COLORS.success, borderColor: COLORS.success },
   timerChipText: { color: COLORS.onSurface, fontSize: 11, fontWeight: '700' },
   timerChipDuration: { color: COLORS.brand, fontSize: 12, fontWeight: '800', marginLeft: 2 },
+  // Floating timer bar
+  floatingTimers: { position: 'absolute', left: SPACING.md, right: SPACING.md },
+  floatingTimersInner: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, backgroundColor: COLORS.surfaceSecondary, borderRadius: RADIUS.pill, paddingLeft: SPACING.md, paddingRight: 4, paddingVertical: 6, borderWidth: 1, borderColor: COLORS.border, shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 8, shadowOffset: { width: 0, height: 4 }, elevation: 6 },
+  floatingChip: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 6, borderRadius: RADIUS.pill, backgroundColor: COLORS.success },
+  floatingChipLabel: { color: '#fff', fontSize: 11, fontWeight: '700', maxWidth: 110 },
+  floatingChipTime: { color: '#fff', fontSize: 12, fontWeight: '800', fontVariant: ['tabular-nums'] },
   blendPanel: { marginTop: SPACING.md, padding: SPACING.md, backgroundColor: COLORS.brandTertiary, borderRadius: RADIUS.md, gap: SPACING.sm },
   blendTitle: { fontSize: 12, fontWeight: '800', color: COLORS.brand, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 2 },
 
