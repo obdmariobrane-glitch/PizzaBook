@@ -237,14 +237,20 @@ export default function CalculatorHome() {
           {showMixSteps ? (
             <View style={styles.stepsBox}>
               {mixing === 'hand' ? (
-                <PhaseBlock title={t.calc.handMixSteps.A.title} steps={t.calc.handMixSteps.A.steps} />
+                <>
+                  <PhaseBlock title={t.calc.handMixSteps.A.title} steps={t.calc.handMixSteps.A.steps} />
+                  <PhaseBlock title={t.calc.handMixSteps.B.title} steps={t.calc.handMixSteps.B.steps} />
+                  <PhaseBlock title={t.calc.handMixSteps.C.title} steps={t.calc.handMixSteps.C.steps} />
+                  <PhaseBlock title={t.calc.handMixSteps.D.title} steps={t.calc.handMixSteps.D.steps} />
+                </>
               ) : (
-                <PhaseBlock title={t.calc.mixerSteps.A.title} steps={t.calc.mixerSteps.A.steps} />
+                <>
+                  <PhaseBlock title={t.calc.mixerSteps.A.title} steps={t.calc.mixerSteps.A.steps} />
+                  <PhaseBlock title={t.calc.mixerSteps.B.title} steps={t.calc.mixerSteps.B.steps} />
+                  <PhaseBlock title={t.calc.mixerSteps.C.title} steps={t.calc.mixerSteps.C.steps} />
+                  <PhaseBlock title={t.calc.mixerSteps.D.title} steps={t.calc.mixerSteps.D.steps} />
+                </>
               )}
-              {/* Phases B, C, D shared for both hand and mixer */}
-              <PhaseBlock title={t.calc.mixerSteps.B.title} steps={t.calc.mixerSteps.B.steps} />
-              <PhaseBlock title={t.calc.mixerSteps.C.title} steps={t.calc.mixerSteps.C.steps} />
-              <PhaseBlock title={t.calc.mixerSteps.D.title} steps={t.calc.mixerSteps.D.steps} />
             </View>
           ) : null}
         </View>
@@ -266,17 +272,12 @@ export default function CalculatorHome() {
           </View>
         </View>
 
-        {/* 6. RESULT - AT BOTTOM */}
+        {/* 6. RESULT - AT BOTTOM: Total FIRST, then per-pizza */}
         <View style={styles.recipeCard}>
-          <Text style={styles.recipeSection}>6 · Za 1 pizzu · {diameter} cm</Text>
-          <ResultRow label={t.calc.doughBall} value={`${dims.doughBall} g`} />
-          <ResultRow label={t.calc.sauce} value={`${dims.sauce} g`} />
-          <ResultRow label={t.calc.cheese} value={`${dims.cheese} g`} />
-
           {dough.preferment ? (
             <>
-              <Text style={[styles.recipeSection, { marginTop: SPACING.md }]}>
-                {t.calc.preferment} · {method === 'biga' ? 'BIGA 50%' : 'POOLISH 35%'}
+              <Text style={styles.recipeSection}>
+                6 · {t.calc.preferment} · {method === 'biga' ? 'BIGA 50%' : 'POOLISH 35%'}
               </Text>
               <ResultRow label={t.calc.totalFlour} value={`${dough.preferment.flour} g`} highlight />
               <ResultRow label={t.calc.totalWater} value={`${dough.preferment.water} g`} highlight />
@@ -310,8 +311,8 @@ export default function CalculatorHome() {
             </>
           ) : (
             <>
-              <Text style={[styles.recipeSection, { marginTop: SPACING.md }]}>
-                Ukupno tijesto · {pizzas} × {dims.doughBall}g = {dough.totalDough}g
+              <Text style={styles.recipeSection}>
+                6 · Ukupno tijesto · {pizzas} × {dims.doughBall}g = {dough.totalDough}g
               </Text>
               <ResultRow label={`Brašno (${flourProfile.label})`} value={`${dough.main.flour} g`} highlight />
               {ice ? (
@@ -327,6 +328,14 @@ export default function CalculatorHome() {
               <ResultRow label={t.calc.oilAmount} value={`${dough.main.oil} g`} />
             </>
           )}
+
+          {/* Per-pizza normative — BELOW total */}
+          <Text style={[styles.recipeSection, { marginTop: SPACING.md, paddingTop: SPACING.md, borderTopWidth: 1, borderTopColor: COLORS.divider }]}>
+            Za 1 pizzu · {diameter} cm
+          </Text>
+          <ResultRow label={t.calc.doughBall} value={`${dims.doughBall} g`} />
+          <ResultRow label={t.calc.sauce} value={`${dims.sauce} g`} />
+          <ResultRow label={t.calc.cheese} value={`${dims.cheese} g`} />
         </View>
 
         {/* 7. ACTIONS */}
