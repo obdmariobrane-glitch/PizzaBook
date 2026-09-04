@@ -10,17 +10,18 @@ import { useT } from '../../src/i18n/LanguageProvider';
 import { COLORS, SPACING, RADIUS } from '../../src/theme';
 import {
   dimensionsCalc, doughCalc, iceCalc,
-  Method, OvenType, FlourType, FLOUR_PROFILES,
+  Method, OvenType, FlourType, FLOUR_PROFILES, BASE_FLOURS, blendIdealHydration,
 } from '../../src/calculator';
 import { useAuth } from '../../src/auth';
 
 const DIAMETERS = [26, 28, 30, 33, 35, 40];
-const FLOURS: { key: FlourType; emoji: string; label: string }[] = [
-  { key: 'caputo00', emoji: '🌾', label: 'Tipo 0 i 00' },
-  { key: 'manitoba', emoji: '🥖', label: 'Manitoba / Visoki W' },
-  { key: 'spelt', emoji: '🌿', label: 'Pirovo brašno' },
+const FLOURS: { key: FlourType; emoji: string; label: string; sub?: string }[] = [
+  { key: 'caputo00', emoji: '🌾', label: 'Tipo 0 i 00', sub: 'Caputo Pizzeria / klasično 00' },
+  { key: 'manitoba', emoji: '🥖', label: 'Manitoba / Visoki W', sub: 'Caputo Cuoco / Oro' },
+  { key: 'spelt', emoji: '🌿', label: 'Pirovo brašno', sub: 'Spelt' },
   { key: 'wholeWheat', emoji: '🍞', label: 'Integralno brašno' },
-  { key: 'glutenFree', emoji: '🌽', label: 'Bezglutensko' },
+  { key: 'glutenFree', emoji: '🌽', label: 'Bezglutensko', sub: 'Gluten-Free' },
+  { key: 'custom', emoji: '🧪', label: 'Mješavina brašna', sub: 'Custom blend 2 vrste' },
 ];
 
 export default function CalculatorHome() {
@@ -30,6 +31,9 @@ export default function CalculatorHome() {
   const { user } = useAuth();
 
   const [flour, setFlour] = useState<FlourType>('caputo00');
+  const [blendA, setBlendA] = useState<Exclude<FlourType, 'custom'>>('caputo00');
+  const [blendB, setBlendB] = useState<Exclude<FlourType, 'custom'>>('wholeWheat');
+  const [blendPctA, setBlendPctA] = useState(70);
   const [pizzas, setPizzas] = useState(4);
   const [diameter, setDiameter] = useState(30);
   const [customDiameter, setCustomDiameter] = useState('');
@@ -48,8 +52,33 @@ export default function CalculatorHome() {
   const OIL_PCT = 2;
 
   const flourProfile = FLOUR_PROFILES[flour];
-  const isIdealHydration = hydration === flourProfile.ideal;
-  const inRange = hydration >= flourProfile.min && hydration <= flourProfile.max;
+  const isCustom = flour === 'custom';
+  const customIdeal = useMemo(() => blendIdealHydration(blendA, blendB, blendPctA), [blendA, blendB, blendPctA]);
+  const effectiveIdeal = isCustom ? customIdeal : flourProfile.ideal;
+  const isIdealHydration = hydration === effectiveIdeal;
+  const inRange = isCustom
+    ? Math.abs(hydration - customIdeal) <= 3
+    : (hydration >= flourProfile.min && hydration <= flourProfile.max);
+
+  // Auto-adjust hydration when custom blend changes
+  const changeFlour = (f: FlourType) => {
+    setFlour(f);
+    if (f === 'custom') {
+      setHydration(blendIdealHydration(blendA, blendB, blendPctA));
+    } else {
+      setHydration(FLOUR_PROFILES[f].ideal);
+    }
+    try { Haptics.selectionAsync(); } catch {}
+  };
+
+  const changeBlend = (which: 'a' | 'b' | 'pct', value: any) => {
+    let a = blendA, b = blendB, p = blendPctA;
+    if (which === 'a') { a = value; setBlendA(value); }
+    if (which === 'b') { b = value; setBlendB(value); }
+    if (which === 'pct') { p = value; setBlendPctA(value); }
+    if (flour === 'custom') setHydration(blendIdealHydration(a, b, p));
+    try { Haptics.selectionAsync(); } catch {}
+  };
 
   // Reactive calculations - RE-COMPUTE on any input change
   const dims = useMemo(() => dimensionsCalc(diameter, pizzas), [diameter, pizzas]);
@@ -64,12 +93,7 @@ export default function CalculatorHome() {
   const ice = useMemo(() => iceNeeded ? iceCalc(dough.total.water, roomTemp, 4) : null, [iceNeeded, dough.total.water, roomTemp]);
 
   // Auto-adjust hydration when flour changes to that flour's ideal
-  const changeFlour = (f: FlourType) => {
-    setFlour(f);
-    setHydration(FLOUR_PROFILES[f].ideal);
-    try { Haptics.selectionAsync(); } catch {}
-  };
-
+  // (uses changeFlour above)
   const step = (fn: () => void) => { try { Haptics.selectionAsync(); } catch {}; fn(); };
 
   const commitCustomDiameter = () => {
@@ -128,18 +152,64 @@ export default function CalculatorHome() {
             {FLOURS.map((f) => {
               const p = FLOUR_PROFILES[f.key];
               const active = flour === f.key;
+              const rangeText = f.key === 'custom'
+                ? 'Odaberi 2 brašna i udio'
+                : `Idealno ${p.ideal}% · raspon ${p.min}–${p.max}%`;
               return (
                 <Pressable key={f.key} testID={`flour-${f.key}`} onPress={() => changeFlour(f.key)} style={[styles.flourRow, active && styles.flourRowActive]}>
                   <Text style={styles.flourRowEmoji}>{f.emoji}</Text>
                   <View style={{ flex: 1 }}>
                     <Text style={[styles.flourRowLabel, active && { color: '#fff' }]}>{f.label}</Text>
-                    <Text style={[styles.flourRowRange, active && { color: '#fff' }]}>Idealno {p.ideal}% · raspon {p.min}–{p.max}%</Text>
+                    {f.sub ? <Text style={[styles.flourRowSub, active && { color: 'rgba(255,255,255,0.85)' }]} numberOfLines={1}>{f.sub}</Text> : null}
+                    <Text style={[styles.flourRowRange, active && { color: '#fff' }]}>{rangeText}</Text>
                   </View>
                   {active ? <Icon name="checkmark-circle" size={20} color="#fff" /> : null}
                 </Pressable>
               );
             })}
           </View>
+
+          {/* Blend controls appear reactively when custom is selected */}
+          {isCustom ? (
+            <View style={styles.blendPanel}>
+              <Text style={styles.blendTitle}>Sastav mješavine</Text>
+
+              <Text style={styles.label}>Brašno A ({blendPctA}%)</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+                {BASE_FLOURS.map((k) => (
+                  <Pressable key={k} testID={`blendA-${k}`} onPress={() => changeBlend('a', k)} style={[styles.chip, blendA === k && styles.chipActive]}>
+                    <Text style={[styles.chipText, blendA === k && styles.chipTextActive]}>{FLOUR_PROFILES[k].label}</Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
+
+              <Text style={[styles.label, { marginTop: SPACING.sm }]}>Brašno B ({100 - blendPctA}%)</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+                {BASE_FLOURS.map((k) => (
+                  <Pressable key={k} testID={`blendB-${k}`} onPress={() => changeBlend('b', k)} style={[styles.chip, blendB === k && styles.chipActive]}>
+                    <Text style={[styles.chipText, blendB === k && styles.chipTextActive]}>{FLOUR_PROFILES[k].label}</Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
+
+              <View style={[styles.row, { marginTop: SPACING.sm }]}>
+                <Text style={styles.label}>Udio Brašna A</Text>
+                <View style={styles.stepper}>
+                  <Pressable testID="blendPct-minus" onPress={() => changeBlend('pct', Math.max(5, blendPctA - 5))} style={styles.stepBtn}>
+                    <Icon name="remove" size={20} color={COLORS.brand} />
+                  </Pressable>
+                  <Text style={styles.stepVal}>{blendPctA}%</Text>
+                  <Pressable testID="blendPct-plus" onPress={() => changeBlend('pct', Math.min(95, blendPctA + 5))} style={styles.stepBtn}>
+                    <Icon name="add" size={20} color={COLORS.brand} />
+                  </Pressable>
+                </View>
+              </View>
+
+              <Text style={styles.hint}>
+                Idealna hidracija mješavine: {customIdeal}% ({FLOUR_PROFILES[blendA].ideal}% × {blendPctA}% + {FLOUR_PROFILES[blendB].ideal}% × {100 - blendPctA}%)
+              </Text>
+            </View>
+          ) : null}
         </View>
 
         {/* 2. VELIČINA PIZZE */}
@@ -361,7 +431,15 @@ export default function CalculatorHome() {
               <Text style={styles.recipeSection}>
                 6 · Ukupno tijesto · {pizzas} × {dims.doughBall}g = {dough.totalDough}g
               </Text>
-              <ResultRow label={`Brašno (${flourProfile.label})`} value={`${dough.main.flour} g`} highlight />
+              {isCustom ? (
+                <>
+                  <ResultRow label={`${FLOUR_PROFILES[blendA].label} (${blendPctA}%)`} value={`${Math.round(dough.main.flour * blendPctA / 100)} g`} highlight />
+                  <ResultRow label={`${FLOUR_PROFILES[blendB].label} (${100 - blendPctA}%)`} value={`${Math.round(dough.main.flour * (100 - blendPctA) / 100)} g`} highlight />
+                  <ResultRow label="Ukupno brašno" value={`${dough.main.flour} g`} />
+                </>
+              ) : (
+                <ResultRow label={`Brašno (${flourProfile.label})`} value={`${dough.main.flour} g`} highlight />
+              )}
               {ice ? (
                 <>
                   <ResultRow label={t.calc.coldWater} value={`${ice.water} g`} />
@@ -371,7 +449,7 @@ export default function CalculatorHome() {
                 <ResultRow label={`${t.calc.totalWater} (${dough.waterTemp}°C)`} value={`${dough.main.water} g`} highlight />
               )}
               <ResultRow label={t.calc.saltAmount} value={`${dough.main.salt} g`} />
-              <ResultRow label={t.calc.yeastAmount + ' (svježi)'} value={`${dough.main.yeast} g`} />
+              <ResultRow label={`${t.calc.yeastAmount} (svježi, ${dough.yeastPct}%)`} value={`${dough.main.yeast} g`} />
               <ResultRow label={t.calc.oilAmount} value={`${dough.main.oil} g`} />
             </>
           )}
@@ -605,7 +683,10 @@ const styles = StyleSheet.create({
   flourRowActive: { backgroundColor: COLORS.brand, borderColor: COLORS.brand },
   flourRowEmoji: { fontSize: 28 },
   flourRowLabel: { fontSize: 15, fontWeight: '700', color: COLORS.onSurface },
+  flourRowSub: { fontSize: 11, color: COLORS.muted, marginTop: 2, fontStyle: 'italic' },
   flourRowRange: { fontSize: 12, color: COLORS.muted, fontWeight: '600', marginTop: 2 },
+  blendPanel: { marginTop: SPACING.md, padding: SPACING.md, backgroundColor: COLORS.brandTertiary, borderRadius: RADIUS.md, gap: SPACING.sm },
+  blendTitle: { fontSize: 12, fontWeight: '800', color: COLORS.brand, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 2 },
 
   stepper: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md, backgroundColor: COLORS.surface, borderRadius: RADIUS.pill, paddingHorizontal: 4, borderWidth: 1, borderColor: COLORS.border },
   stepperIdeal: { borderColor: COLORS.success, backgroundColor: '#DCFCE7' },

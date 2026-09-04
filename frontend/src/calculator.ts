@@ -5,7 +5,7 @@ export type Mixing = 'hand' | 'home' | 'spiral';
 export type Fermentation = 'sameDay' | 'coldLong';
 export type OvenType = 'ooni' | 'homeStone' | 'homePan';
 
-export type FlourType = 'caputo00' | 'manitoba' | 'spelt' | 'wholeWheat' | 'glutenFree';
+export type FlourType = 'caputo00' | 'manitoba' | 'spelt' | 'wholeWheat' | 'glutenFree' | 'custom';
 
 export const FLOUR_PROFILES: Record<FlourType, { label: string; ideal: number; min: number; max: number }> = {
   caputo00: { label: 'Tipo 0 i 00', ideal: 68, min: 65, max: 70 },
@@ -13,7 +13,18 @@ export const FLOUR_PROFILES: Record<FlourType, { label: string; ideal: number; m
   spelt: { label: 'Pirovo brašno', ideal: 62, min: 60, max: 65 },
   wholeWheat: { label: 'Integralno brašno', ideal: 72, min: 70, max: 75 },
   glutenFree: { label: 'Bezglutensko', ideal: 80, min: 75, max: 85 },
+  custom: { label: 'Mješavina brašna', ideal: 68, min: 55, max: 90 },
 };
+
+// Base flours available for blending (excludes 'custom' itself)
+export const BASE_FLOURS: Exclude<FlourType, 'custom'>[] = [
+  'caputo00', 'manitoba', 'spelt', 'wholeWheat', 'glutenFree',
+];
+
+export function blendIdealHydration(a: Exclude<FlourType, 'custom'>, b: Exclude<FlourType, 'custom'>, pctA: number) {
+  const pctB = 100 - pctA;
+  return Math.round((FLOUR_PROFILES[a].ideal * pctA + FLOUR_PROFILES[b].ideal * pctB) / 100);
+}
 
 // Exact normative table per pizza diameter (from spec)
 const DIMENSION_TABLE: Record<number, { ball: number; sauce: number; cheese: number }> = {
