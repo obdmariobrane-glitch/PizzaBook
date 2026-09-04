@@ -123,15 +123,21 @@ export const translations = {
       showSteps: 'Prikaži korake',
       hideSteps: 'Sakrij korake',
       bakingInstructions: 'Upute za pečenje',
-      handMixSteps: [
-        'U posudi otopite kvasac u 90% ukupne predviđene vode.',
-        'Postupno dodajte polovicu brašna miješajući rukom dok ne dobijete glatku smjesu bez grudica (nalik smjesi za palačinke).',
-        'Dodajte sol i dobro promiješajte kako sol ne bi došla u izravan kontakt s kvascem.',
-        'Postupno dodajte preostalo brašno i ostatak vode te umijesite kompaktno tijesto.',
-        'Prebacite tijesto na radnu površinu i mijesite dlanovima 10–15 minuta dok površina ne postane potpuno glatka.',
-        'Pokrijte posudom i ostavite 10 minuta na pauzi (autoliza/odmor).',
-        'Napravite 2 serije rastezanja i preklapanja (stretch & fold) u razmaku od 20 minuta radi jačanja glutenske mreže.',
-      ],
+      handMixSteps: {
+        A: {
+          title: 'Faza A: Priprema i ručni zamjes',
+          steps: [
+            'U posudi otopite kvasac u 90% ukupne predviđene vode.',
+            'Postupno dodajte polovicu brašna miješajući rukom dok ne dobijete glatku smjesu bez grudica.',
+            'Dodajte sol i dobro promiješajte kako sol ne bi došla u izravan kontakt s kvascem.',
+            'Postupno dodajte preostalo brašno i ostatak vode te umijesite kompaktno tijesto.',
+            'Kada se smjesa sjedini i postane glatka, dodajte ekstra djevičansko maslinovo ulje. Čim tijesto potpuno upije ulje, mijesite dalje.',
+            'Prebacite tijesto na radnu površinu i mijesite dlanovima 10–15 minuta dok površina ne postane potpuno glatka.',
+            'Pokrijte posudom i ostavite 10 minuta na pauzi (autoliza/odmor).',
+            'Napravite 2 serije rastezanja i preklapanja (stretch & fold) u razmaku od 20 minuta.',
+          ],
+        },
+      },
       mixerSteps: {
         A: {
           title: 'Faza A: Priprema i zamjes tijesta',
@@ -377,15 +383,21 @@ export const translations = {
       showSteps: 'Show steps',
       hideSteps: 'Hide steps',
       bakingInstructions: 'Baking instructions',
-      handMixSteps: [
-        'Dissolve yeast in 90% of the total water.',
-        'Gradually add half the flour, mixing by hand until smooth (pancake-batter consistency).',
-        'Add salt and mix well so it does not contact yeast directly.',
-        'Gradually add the remaining flour and water, knead to a compact dough.',
-        'Move to work surface and knead 10–15 min until smooth.',
-        'Cover and rest 10 min (autolyse).',
-        'Do 2 rounds of stretch & fold, 20 min apart, to strengthen gluten.',
-      ],
+      handMixSteps: {
+        A: {
+          title: 'Phase A: Prep & hand mix',
+          steps: [
+            'Dissolve yeast in 90% of the total water.',
+            'Gradually add half the flour, mixing by hand until smooth.',
+            'Add salt and mix well so it does not contact yeast directly.',
+            'Gradually add the remaining flour and water, knead to a compact dough.',
+            'Once smooth, add EVOO. Once fully absorbed, keep kneading.',
+            'Move to work surface and knead 10–15 min until smooth.',
+            'Cover and rest 10 min (autolyse).',
+            'Do 2 rounds of stretch & fold, 20 min apart.',
+          ],
+        },
+      },
       mixerSteps: {
         A: {
           title: 'Phase A: Mixing',
@@ -604,15 +616,21 @@ export const translations = {
       showSteps: 'Schritte zeigen',
       hideSteps: 'Schritte ausblenden',
       bakingInstructions: 'Backanleitung',
-      handMixSteps: [
-        'Hefe in 90% des Wassers auflösen.',
-        'Nach und nach die Hälfte des Mehls mit der Hand einrühren (Pfannkuchenteig-Konsistenz).',
-        'Salz zugeben und gut vermischen, damit es nicht direkt mit der Hefe in Kontakt kommt.',
-        'Restliches Mehl und Wasser zufügen und zu einem kompakten Teig kneten.',
-        'Auf die Arbeitsfläche, 10–15 Min. kneten bis glatt.',
-        'Abdecken, 10 Min. Autolyse.',
-        '2 Sets Stretch & Fold im Abstand von 20 Min.',
-      ],
+      handMixSteps: {
+        A: {
+          title: 'Phase A: Vorbereitung & Kneten',
+          steps: [
+            'Hefe in 90% des Wassers auflösen.',
+            'Nach und nach die Hälfte des Mehls mit der Hand einrühren.',
+            'Salz zugeben und gut vermischen, damit es nicht direkt mit der Hefe in Kontakt kommt.',
+            'Restliches Mehl und Wasser zufügen und zu einem kompakten Teig kneten.',
+            'Wenn glatt, Olivenöl zugeben. Sobald aufgenommen, weiterkneten.',
+            'Auf die Arbeitsfläche, 10–15 Min. kneten bis glatt.',
+            'Abdecken, 10 Min. Autolyse.',
+            '2 Sets Stretch & Fold im Abstand von 20 Min.',
+          ],
+        },
+      },
       mixerSteps: {
         A: {
           title: 'Phase A: Kneten',

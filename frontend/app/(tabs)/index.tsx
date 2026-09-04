@@ -16,11 +16,11 @@ import { useAuth } from '../../src/auth';
 
 const DIAMETERS = [26, 28, 30, 33, 35, 40];
 const FLOURS: { key: FlourType; emoji: string; label: string }[] = [
-  { key: 'caputo00', emoji: '🌾', label: 'Caputo 00 / Tipo 0' },
-  { key: 'manitoba', emoji: '💪', label: 'Manitoba / Visoki W' },
-  { key: 'spelt', emoji: '🌿', label: 'Pirovo / Spelt' },
-  { key: 'wholeWheat', emoji: '🌰', label: 'Integralno' },
-  { key: 'glutenFree', emoji: '🚫', label: 'Bezglutensko' },
+  { key: 'caputo00', emoji: '🌾', label: 'Tipo 0 i 00' },
+  { key: 'manitoba', emoji: '🥖', label: 'Manitoba / Visoki W' },
+  { key: 'spelt', emoji: '🌿', label: 'Pirovo brašno' },
+  { key: 'wholeWheat', emoji: '🍞', label: 'Integralno brašno' },
+  { key: 'glutenFree', emoji: '🌽', label: 'Bezglutensko' },
 ];
 
 export default function CalculatorHome() {
@@ -114,22 +114,24 @@ export default function CalculatorHome() {
 
       <ScrollView contentContainerStyle={{ padding: SPACING.lg, paddingBottom: SPACING.xxxl * 2, gap: SPACING.lg }} keyboardShouldPersistTaps="handled">
 
-        {/* 1. FLOUR */}
+        {/* 1. FLOUR - compact horizontal chip row */}
         <View style={styles.card}>
           <Text style={styles.cardTitle}>1 · {t.calc.flourType}</Text>
-          <View style={styles.flourGrid}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.flourRowScroll}>
             {FLOURS.map((f) => {
               const p = FLOUR_PROFILES[f.key];
               const active = flour === f.key;
               return (
-                <Pressable key={f.key} testID={`flour-${f.key}`} onPress={() => changeFlour(f.key)} style={[styles.flourCard, active && styles.flourCardActive]}>
-                  <Text style={styles.flourEmoji}>{f.emoji}</Text>
-                  <Text style={[styles.flourLabel, active && { color: '#fff' }]} numberOfLines={2}>{f.label}</Text>
-                  <Text style={[styles.flourRange, active && { color: '#fff' }]}>{p.min}–{p.max}% (◎ {p.ideal}%)</Text>
+                <Pressable key={f.key} testID={`flour-${f.key}`} onPress={() => changeFlour(f.key)} style={[styles.flourChip, active && styles.flourChipActive]}>
+                  <Text style={styles.flourChipEmoji}>{f.emoji}</Text>
+                  <View>
+                    <Text style={[styles.flourChipLabel, active && { color: '#fff' }]} numberOfLines={1}>{f.label}</Text>
+                    <Text style={[styles.flourChipRange, active && { color: '#fff' }]}>{p.min}–{p.max}% · ◎ {p.ideal}%</Text>
+                  </View>
                 </Pressable>
               );
             })}
-          </View>
+          </ScrollView>
         </View>
 
         {/* 2. VELIČINA PIZZE */}
@@ -233,33 +235,17 @@ export default function CalculatorHome() {
             <Icon name={showMixSteps ? 'chevron-up' : 'chevron-down'} size={16} color={COLORS.brand} />
           </Pressable>
           {showMixSteps ? (
-            mixing === 'hand' ? (
-              <View style={styles.stepsBox}>
-                {t.calc.handMixSteps.map((s, i) => (
-                  <View key={i} style={styles.stepItem}>
-                    <View style={styles.stepNum}><Text style={styles.stepNumText}>{i + 1}</Text></View>
-                    <Text style={styles.stepText}>{s}</Text>
-                  </View>
-                ))}
-              </View>
-            ) : (
-              <View style={styles.stepsBox}>
-                {(['A', 'B', 'C', 'D'] as const).map((phase) => {
-                  const p = t.calc.mixerSteps[phase];
-                  return (
-                    <View key={phase} style={{ marginBottom: SPACING.md }}>
-                      <Text style={styles.phaseTitle}>{p.title}</Text>
-                      {p.steps.map((s, i) => (
-                        <View key={i} style={styles.stepItem}>
-                          <View style={styles.stepNum}><Text style={styles.stepNumText}>{i + 1}</Text></View>
-                          <Text style={styles.stepText}>{s}</Text>
-                        </View>
-                      ))}
-                    </View>
-                  );
-                })}
-              </View>
-            )
+            <View style={styles.stepsBox}>
+              {mixing === 'hand' ? (
+                <PhaseBlock title={t.calc.handMixSteps.A.title} steps={t.calc.handMixSteps.A.steps} />
+              ) : (
+                <PhaseBlock title={t.calc.mixerSteps.A.title} steps={t.calc.mixerSteps.A.steps} />
+              )}
+              {/* Phases B, C, D shared for both hand and mixer */}
+              <PhaseBlock title={t.calc.mixerSteps.B.title} steps={t.calc.mixerSteps.B.steps} />
+              <PhaseBlock title={t.calc.mixerSteps.C.title} steps={t.calc.mixerSteps.C.steps} />
+              <PhaseBlock title={t.calc.mixerSteps.D.title} steps={t.calc.mixerSteps.D.steps} />
+            </View>
           ) : null}
         </View>
 
@@ -267,9 +253,9 @@ export default function CalculatorHome() {
         <View style={styles.card}>
           <Text style={styles.cardTitle}>5 · {t.calc.baking}</Text>
           <View style={styles.ovenRow}>
-            <OvenCard active={oven === 'homeStone'} onPress={() => step(() => setOven('homeStone'))} emoji="🧱" title={t.calc.homeStone} testID="oven-homeStone" />
-            <OvenCard active={oven === 'ooni'} onPress={() => step(() => setOven('ooni'))} emoji="🍕" title={t.calc.ooni} testID="oven-ooni" />
-            <OvenCard active={oven === 'homePan'} onPress={() => step(() => setOven('homePan'))} emoji="🥘" title={t.calc.homePan} testID="oven-homePan" />
+            <OvenCard active={oven === 'homeStone'} onPress={() => step(() => setOven('homeStone'))} icon="home" title={t.calc.homeStone} testID="oven-homeStone" />
+            <OvenCard active={oven === 'ooni'} onPress={() => step(() => setOven('ooni'))} icon="flame" title={t.calc.ooni} testID="oven-ooni" />
+            <OvenCard active={oven === 'homePan'} onPress={() => step(() => setOven('homePan'))} icon="restaurant" title={t.calc.homePan} testID="oven-homePan" />
           </View>
           <View style={styles.bakeInstructions}>
             <View style={{ flexDirection: 'row', gap: SPACING.sm, alignItems: 'center' }}>
@@ -382,10 +368,26 @@ function ResultRow({ label, value, highlight }: { label: string; value: string; 
   );
 }
 
-function OvenCard({ active, onPress, emoji, title, testID }: any) {
+function PhaseBlock({ title, steps }: { title: string; steps: readonly string[] }) {
+  return (
+    <View style={{ marginBottom: SPACING.md }}>
+      <Text style={styles.phaseTitle}>{title}</Text>
+      {steps.map((s, i) => (
+        <View key={i} style={styles.stepItem}>
+          <View style={styles.stepNum}><Text style={styles.stepNumText}>{i + 1}</Text></View>
+          <Text style={styles.stepText}>{s}</Text>
+        </View>
+      ))}
+    </View>
+  );
+}
+
+function OvenCard({ active, onPress, icon, title, testID }: any) {
   return (
     <Pressable testID={testID} onPress={onPress} style={[styles.ovenCard, active && styles.ovenCardActive]}>
-      <Text style={styles.ovenEmoji}>{emoji}</Text>
+      <View style={[styles.ovenIconWrap, active && styles.ovenIconWrapActive]}>
+        <Icon name={icon} size={28} color={active ? '#fff' : COLORS.brand} />
+      </View>
       <Text style={[styles.ovenText, active && { color: '#fff' }]} numberOfLines={2}>{title}</Text>
     </Pressable>
   );
@@ -539,12 +541,12 @@ const styles = StyleSheet.create({
   label: { fontSize: 13, color: COLORS.muted, fontWeight: '600' },
   subLabel: { fontSize: 11, color: COLORS.muted, marginTop: 2 },
 
-  flourGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.sm },
-  flourCard: { flexBasis: '48%', flexGrow: 1, padding: SPACING.md, borderRadius: RADIUS.md, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border, alignItems: 'center', gap: 4 },
-  flourCardActive: { backgroundColor: COLORS.brand, borderColor: COLORS.brand },
-  flourEmoji: { fontSize: 24 },
-  flourLabel: { fontSize: 12, fontWeight: '700', color: COLORS.onSurface, textAlign: 'center' },
-  flourRange: { fontSize: 10, color: COLORS.muted, fontWeight: '600' },
+  flourRowScroll: { gap: SPACING.sm, paddingRight: SPACING.md },
+  flourChip: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, paddingHorizontal: SPACING.md, paddingVertical: 8, borderRadius: RADIUS.md, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border, flexShrink: 0 },
+  flourChipActive: { backgroundColor: COLORS.brand, borderColor: COLORS.brand },
+  flourChipEmoji: { fontSize: 22 },
+  flourChipLabel: { fontSize: 13, fontWeight: '700', color: COLORS.onSurface },
+  flourChipRange: { fontSize: 11, color: COLORS.muted, fontWeight: '600' },
 
   stepper: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md, backgroundColor: COLORS.surface, borderRadius: RADIUS.pill, paddingHorizontal: 4, borderWidth: 1, borderColor: COLORS.border },
   stepperIdeal: { borderColor: COLORS.success, backgroundColor: '#DCFCE7' },
@@ -583,6 +585,8 @@ const styles = StyleSheet.create({
   ovenRow: { flexDirection: 'row', gap: SPACING.sm },
   ovenCard: { flex: 1, paddingVertical: SPACING.md, paddingHorizontal: SPACING.sm, borderRadius: RADIUS.md, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border, alignItems: 'center', gap: 6, minHeight: 88 },
   ovenCardActive: { backgroundColor: COLORS.brand, borderColor: COLORS.brand },
+  ovenIconWrap: { width: 52, height: 52, borderRadius: RADIUS.md, backgroundColor: COLORS.brandTertiary, alignItems: 'center', justifyContent: 'center' },
+  ovenIconWrapActive: { backgroundColor: 'rgba(255,255,255,0.2)' },
   ovenEmoji: { fontSize: 30 },
   ovenText: { color: COLORS.onSurface, fontSize: 11, fontWeight: '700', textAlign: 'center' },
   bakeInstructions: { marginTop: SPACING.md, gap: SPACING.sm, paddingTop: SPACING.md, borderTopWidth: 1, borderTopColor: COLORS.divider },
