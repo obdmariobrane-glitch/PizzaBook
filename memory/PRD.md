@@ -82,3 +82,10 @@ Comprehensive mobile app for home pizza makers - a calculator, planner, and open
 
 ## Business enhancement
 Consider adding: featured/curated recipes section, weekly community "pizza of the week", or a lightweight badge system for prolific posters — all boost retention and shareability.
+
+
+## Session Update (2026-06)
+- Added detailed BIGA and POOLISH step-by-step recipes in HR/EN/DE/SL, split into 3 phases (Faza 1: Preferment, Faza 2: Final mix — hand OR mixer variant, Faza 3: Rest/Balls/Bake). Direct method keeps the existing 4-phase (A/B/C/D) instructions.
+- New file src/i18n/prefermentSteps.ts holds all Biga+Poolish content in 4 languages.
+- Added persistent checkboxes on every step: numbered pill becomes a green ✓ and text is struck-through when tapped. State persists via AsyncStorage under key 'completedSteps' with scoped keys `${method}-${mixing}-${phaseKey}-${idx}`. Includes a 'Reset checked steps' link that clears only the currently displayed path.
+

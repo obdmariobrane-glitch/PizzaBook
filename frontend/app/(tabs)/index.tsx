@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, Modal, TextInput, Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -7,6 +7,7 @@ import * as Haptics from 'expo-haptics';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { useT } from '../../src/i18n/LanguageProvider';
+import { BIGA_STEPS, POOLISH_STEPS, RESET_LABEL } from '../../src/i18n/prefermentSteps';
 import { COLORS, SPACING, RADIUS } from '../../src/theme';
 import {
   dimensionsCalc, doughCalc, iceCalc,
@@ -27,7 +28,7 @@ const FLOURS: { key: FlourType; emoji: string; label: string; sub?: string }[] =
 export default function CalculatorHome() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { t } = useT();
+  const { t, lang } = useT();
   const { user } = useAuth();
 
   const [flour, setFlour] = useState<FlourType>('caputo00');
@@ -47,6 +48,38 @@ export default function CalculatorHome() {
   const [mixing, setMixing] = useState<'hand' | 'mixer'>('hand');
   const [showMixSteps, setShowMixSteps] = useState(false);
   const [moreTool, setMoreTool] = useState<null | 'school' | 'leftover' | 'shopping'>(null);
+  const [completedSteps, setCompletedSteps] = useState<Record<string, boolean>>({});
+
+  // Load persisted checkbox state
+  useEffect(() => {
+    AsyncStorage.getItem('completedSteps').then((v) => {
+      if (v) {
+        try { setCompletedSteps(JSON.parse(v) || {}); } catch {}
+      }
+    });
+  }, []);
+
+  const toggleStep = (key: string) => {
+    setCompletedSteps((prev) => {
+      const next = { ...prev, [key]: !prev[key] };
+      AsyncStorage.setItem('completedSteps', JSON.stringify(next)).catch(() => {});
+      return next;
+    });
+    try { Haptics.selectionAsync(); } catch {}
+  };
+
+  const resetStepsForCurrent = () => {
+    const prefix = `${method}-${mixing}-`;
+    setCompletedSteps((prev) => {
+      const next: Record<string, boolean> = {};
+      for (const k of Object.keys(prev)) {
+        if (!k.startsWith(prefix)) next[k] = prev[k];
+      }
+      AsyncStorage.setItem('completedSteps', JSON.stringify(next)).catch(() => {});
+      return next;
+    });
+    try { Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning); } catch {}
+  };
 
   const SALT_PCT = 2.8;
   const OIL_PCT = 2;
@@ -353,21 +386,49 @@ export default function CalculatorHome() {
           </Pressable>
           {showMixSteps ? (
             <View style={styles.stepsBox}>
-              {mixing === 'hand' ? (
-                <>
-                  <PhaseBlock title={t.calc.handMixSteps.A.title} steps={t.calc.handMixSteps.A.steps} />
-                  <PhaseBlock title={t.calc.handMixSteps.B.title} steps={t.calc.handMixSteps.B.steps} />
-                  <PhaseBlock title={t.calc.handMixSteps.C.title} steps={t.calc.handMixSteps.C.steps} />
-                  <PhaseBlock title={t.calc.handMixSteps.D.title} steps={t.calc.handMixSteps.D.steps} />
-                </>
+              {method === 'direct' ? (
+                mixing === 'hand' ? (
+                  <>
+                    <PhaseBlock title={t.calc.handMixSteps.A.title} steps={t.calc.handMixSteps.A.steps} phaseKey={`direct-hand-A`} completed={completedSteps} onToggle={toggleStep} />
+                    <PhaseBlock title={t.calc.handMixSteps.B.title} steps={t.calc.handMixSteps.B.steps} phaseKey={`direct-hand-B`} completed={completedSteps} onToggle={toggleStep} />
+                    <PhaseBlock title={t.calc.handMixSteps.C.title} steps={t.calc.handMixSteps.C.steps} phaseKey={`direct-hand-C`} completed={completedSteps} onToggle={toggleStep} />
+                    <PhaseBlock title={t.calc.handMixSteps.D.title} steps={t.calc.handMixSteps.D.steps} phaseKey={`direct-hand-D`} completed={completedSteps} onToggle={toggleStep} />
+                  </>
+                ) : (
+                  <>
+                    <PhaseBlock title={t.calc.mixerSteps.A.title} steps={t.calc.mixerSteps.A.steps} phaseKey={`direct-mixer-A`} completed={completedSteps} onToggle={toggleStep} />
+                    <PhaseBlock title={t.calc.mixerSteps.B.title} steps={t.calc.mixerSteps.B.steps} phaseKey={`direct-mixer-B`} completed={completedSteps} onToggle={toggleStep} />
+                    <PhaseBlock title={t.calc.mixerSteps.C.title} steps={t.calc.mixerSteps.C.steps} phaseKey={`direct-mixer-C`} completed={completedSteps} onToggle={toggleStep} />
+                    <PhaseBlock title={t.calc.mixerSteps.D.title} steps={t.calc.mixerSteps.D.steps} phaseKey={`direct-mixer-D`} completed={completedSteps} onToggle={toggleStep} />
+                  </>
+                )
+              ) : method === 'biga' ? (
+                (() => {
+                  const path = BIGA_STEPS[lang][mixing];
+                  return (
+                    <>
+                      <PhaseBlock title={path.p1.title} steps={path.p1.steps} phaseKey={`biga-${mixing}-P1`} completed={completedSteps} onToggle={toggleStep} />
+                      <PhaseBlock title={path.p2.title} steps={path.p2.steps} phaseKey={`biga-${mixing}-P2`} completed={completedSteps} onToggle={toggleStep} />
+                      <PhaseBlock title={path.p3.title} steps={path.p3.steps} phaseKey={`biga-${mixing}-P3`} completed={completedSteps} onToggle={toggleStep} />
+                    </>
+                  );
+                })()
               ) : (
-                <>
-                  <PhaseBlock title={t.calc.mixerSteps.A.title} steps={t.calc.mixerSteps.A.steps} />
-                  <PhaseBlock title={t.calc.mixerSteps.B.title} steps={t.calc.mixerSteps.B.steps} />
-                  <PhaseBlock title={t.calc.mixerSteps.C.title} steps={t.calc.mixerSteps.C.steps} />
-                  <PhaseBlock title={t.calc.mixerSteps.D.title} steps={t.calc.mixerSteps.D.steps} />
-                </>
+                (() => {
+                  const path = POOLISH_STEPS[lang][mixing];
+                  return (
+                    <>
+                      <PhaseBlock title={path.p1.title} steps={path.p1.steps} phaseKey={`poolish-${mixing}-P1`} completed={completedSteps} onToggle={toggleStep} />
+                      <PhaseBlock title={path.p2.title} steps={path.p2.steps} phaseKey={`poolish-${mixing}-P2`} completed={completedSteps} onToggle={toggleStep} />
+                      <PhaseBlock title={path.p3.title} steps={path.p3.steps} phaseKey={`poolish-${mixing}-P3`} completed={completedSteps} onToggle={toggleStep} />
+                    </>
+                  );
+                })()
               )}
+              <Pressable testID="reset-steps" onPress={resetStepsForCurrent} style={styles.resetBtn}>
+                <Icon name="refresh" size={14} color={COLORS.muted} />
+                <Text style={styles.resetBtnText}>{RESET_LABEL[lang]}</Text>
+              </Pressable>
             </View>
           ) : null}
         </View>
@@ -506,16 +567,43 @@ function ResultRow({ label, value, highlight }: { label: string; value: string; 
   );
 }
 
-function PhaseBlock({ title, steps }: { title: string; steps: readonly string[] }) {
+function PhaseBlock({
+  title, steps, phaseKey, completed, onToggle,
+}: {
+  title: string;
+  steps: readonly string[];
+  phaseKey: string;
+  completed: Record<string, boolean>;
+  onToggle: (key: string) => void;
+}) {
   return (
     <View style={{ marginBottom: SPACING.md }}>
       <Text style={styles.phaseTitle}>{title}</Text>
-      {steps.map((s, i) => (
-        <View key={i} style={styles.stepItem}>
-          <View style={styles.stepNum}><Text style={styles.stepNumText}>{i + 1}</Text></View>
-          <Text style={styles.stepText}>{s}</Text>
-        </View>
-      ))}
+      {steps.map((s, i) => {
+        const key = `${phaseKey}-${i}`;
+        const done = !!completed[key];
+        return (
+          <Pressable
+            key={i}
+            testID={`step-${key}`}
+            onPress={() => onToggle(key)}
+            style={({ pressed }) => [styles.stepItem, pressed && { opacity: 0.7 }]}
+          >
+            <View style={styles.stepCheckWrap}>
+              {done ? (
+                <View style={styles.stepCheckDone}>
+                  <Icon name="checkmark" size={14} color="#fff" />
+                </View>
+              ) : (
+                <View style={styles.stepNum}>
+                  <Text style={styles.stepNumText}>{i + 1}</Text>
+                </View>
+              )}
+            </View>
+            <Text style={[styles.stepText, done && styles.stepTextDone]}>{s}</Text>
+          </Pressable>
+        );
+      })}
     </View>
   );
 }
@@ -716,10 +804,15 @@ const styles = StyleSheet.create({
   expandBtn: { flexDirection: 'row', gap: 6, alignItems: 'center', justifyContent: 'center', paddingVertical: 10 },
   expandText: { color: COLORS.brand, fontSize: 13, fontWeight: '700' },
   stepsBox: { gap: SPACING.sm, paddingTop: SPACING.sm },
-  stepItem: { flexDirection: 'row', gap: SPACING.md, alignItems: 'flex-start', marginBottom: 6 },
-  stepNum: { width: 22, height: 22, borderRadius: 11, backgroundColor: COLORS.brand, alignItems: 'center', justifyContent: 'center', marginTop: 2 },
+  stepItem: { flexDirection: 'row', gap: SPACING.md, alignItems: 'flex-start', marginBottom: 6, paddingVertical: 4 },
+  stepCheckWrap: { marginTop: 2 },
+  stepNum: { width: 22, height: 22, borderRadius: 11, backgroundColor: COLORS.brand, alignItems: 'center', justifyContent: 'center' },
   stepNumText: { color: '#fff', fontSize: 11, fontWeight: '800' },
+  stepCheckDone: { width: 22, height: 22, borderRadius: 11, backgroundColor: COLORS.success, alignItems: 'center', justifyContent: 'center' },
   stepText: { flex: 1, color: COLORS.onSurface, fontSize: 13, lineHeight: 19 },
+  stepTextDone: { textDecorationLine: 'line-through', color: COLORS.muted },
+  resetBtn: { flexDirection: 'row', gap: 6, alignItems: 'center', justifyContent: 'center', paddingVertical: 8, marginTop: 4 },
+  resetBtnText: { color: COLORS.muted, fontSize: 12, fontWeight: '600' },
   phaseTitle: { fontSize: 13, color: COLORS.brand, fontWeight: '800', marginBottom: SPACING.sm, textTransform: 'uppercase' },
 
   ovenRow: { flexDirection: 'row', gap: SPACING.sm },
