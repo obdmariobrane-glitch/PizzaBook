@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, Modal, TextInput, Platform, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, Modal, TextInput, Platform, Alert, Image } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import Icon from '@react-native-vector-icons/ionicons';
@@ -44,6 +44,8 @@ export default function CalculatorHome() {
   const [pizzas, setPizzas] = useState(4);
   const [diameter, setDiameter] = useState(30);
   const [customDiameter, setCustomDiameter] = useState('');
+  const [customBallWeight, setCustomBallWeight] = useState<number | null>(null);
+  const [customBallInput, setCustomBallInput] = useState<string>('');
   const [method, setMethod] = useState<Method>('direct');
   const [hydration, setHydration] = useState(FLOUR_PROFILES.caputo00.ideal);
   const [roomTemp, setRoomTemp] = useState(22);
@@ -205,13 +207,14 @@ export default function CalculatorHome() {
 
   // Reactive calculations - RE-COMPUTE on any input change
   const dims = useMemo(() => dimensionsCalc(diameter, pizzas), [diameter, pizzas]);
+  const effectiveBall = customBallWeight ?? dims.doughBall;
   const dough = useMemo(() => doughCalc({
-    pizzas, ballWeight: dims.doughBall, hydration,
+    pizzas, ballWeight: effectiveBall, hydration,
     saltPct: SALT_PCT, oilPct: OIL_PCT, method,
     roomHours, roomTemp, fridgeHours, fridgeTemp,
     mixing: mixing === 'mixer' ? 'spiral' : 'hand',
     yeastType: 'fresh',
-  }), [pizzas, dims.doughBall, hydration, method, roomHours, roomTemp, fridgeHours, fridgeTemp, mixing]);
+  }), [pizzas, effectiveBall, hydration, method, roomHours, roomTemp, fridgeHours, fridgeTemp, mixing]);
   const iceNeeded = roomTemp >= 26;
   const ice = useMemo(() => iceNeeded ? iceCalc(dough.total.water, roomTemp, 4) : null, [iceNeeded, dough.total.water, roomTemp]);
 
@@ -221,14 +224,14 @@ export default function CalculatorHome() {
 
   const commitCustomDiameter = () => {
     const v = parseFloat(customDiameter);
-    if (v >= 15 && v <= 60) setDiameter(Math.round(v));
+    if (v >= 15 && v <= 60) { setDiameter(Math.round(v)); setCustomBallWeight(null); setCustomBallInput(''); }
     setCustomDiameter('');
   };
 
   const saveRecipe = async () => {
     const recipe = {
       pizzas, diameter, hydration, method, flourType: flourProfile.label,
-      ballWeight: dims.doughBall,
+      ballWeight: effectiveBall,
       flour: dough.total.flour, water: dough.total.water,
       salt: dough.total.salt, oil: dough.total.oil, yeast: dough.total.yeast,
       sauce: dims.sauce * pizzas, cheese: dims.cheese * pizzas,
@@ -354,7 +357,10 @@ export default function CalculatorHome() {
 
         {/* 2. VELIČINA PIZZE */}
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>2 · {t.calc.dimensions}</Text>
+          <View style={styles.cardTitleRow}>
+            <Text style={styles.cardTitle}>2 · {t.calc.dimensions}</Text>
+            <Image source={require('../../assets/images/pizza-slice.png')} style={styles.pizzaBadge} />
+          </View>
           <View style={styles.row}>
             <Text style={styles.label}>{t.calc.pizzas}</Text>
             <View style={styles.stepper}>
@@ -367,10 +373,62 @@ export default function CalculatorHome() {
               </Pressable>
             </View>
           </View>
+
+          {/* Ball weight (grams) — manual override */}
+          <View style={[styles.ballRow, { marginTop: SPACING.sm }]}>
+            <View style={styles.ballLabelCol}>
+              <Text style={styles.label}>Gramaža lopte</Text>
+              <Text style={styles.subLabel} numberOfLines={2}>
+                {customBallWeight != null ? `Ručno · zadano ${dims.doughBall}g` : `Auto po promjeru: ${dims.doughBall}g`}
+              </Text>
+            </View>
+            <View style={styles.ballStepper}>
+              <Pressable
+                testID="ball-minus"
+                onPress={() => step(() => setCustomBallWeight(Math.max(50, (customBallWeight ?? dims.doughBall) - 5)))}
+                style={styles.stepBtn}
+              >
+                <Icon name="remove" size={20} color={COLORS.brand} />
+              </Pressable>
+              <TextInput
+                testID="ball-input"
+                value={customBallInput !== '' ? customBallInput : String(effectiveBall)}
+                onChangeText={(txt) => {
+                  const clean = txt.replace(/[^0-9]/g, '').slice(0, 4);
+                  setCustomBallInput(clean);
+                  const n = parseInt(clean, 10);
+                  if (!isNaN(n) && n >= 50 && n <= 600) setCustomBallWeight(n);
+                }}
+                onBlur={() => setCustomBallInput('')}
+                keyboardType="number-pad"
+                style={styles.stepInput}
+                selectTextOnFocus
+              />
+              <Text style={styles.stepUnit}>g</Text>
+              <Pressable
+                testID="ball-plus"
+                onPress={() => step(() => setCustomBallWeight(Math.min(600, (customBallWeight ?? dims.doughBall) + 5)))}
+                style={styles.stepBtn}
+              >
+                <Icon name="add" size={20} color={COLORS.brand} />
+              </Pressable>
+            </View>
+          </View>
+          {customBallWeight != null ? (
+            <Pressable
+              testID="ball-reset"
+              onPress={() => { setCustomBallWeight(null); setCustomBallInput(''); try { Haptics.selectionAsync(); } catch {} }}
+              style={styles.resetInlineBtn}
+            >
+              <Icon name="refresh" size={12} color={COLORS.muted} />
+              <Text style={styles.resetInlineText}>Vrati automatski izračun</Text>
+            </Pressable>
+          ) : null}
+
           <Text style={[styles.label, { marginTop: SPACING.md }]}>{t.calc.diameter}</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
             {DIAMETERS.map((d) => (
-              <Pressable key={d} testID={`diam-${d}`} onPress={() => step(() => setDiameter(d))} style={[styles.chip, diameter === d && styles.chipActive]}>
+              <Pressable key={d} testID={`diam-${d}`} onPress={() => step(() => { setDiameter(d); setCustomBallWeight(null); setCustomBallInput(''); })} style={[styles.chip, diameter === d && styles.chipActive]}>
                 <Text style={[styles.chipText, diameter === d && styles.chipTextActive]}>{d} cm</Text>
               </Pressable>
             ))}
@@ -482,6 +540,7 @@ export default function CalculatorHome() {
         {/* 4. MIXING */}
         <View style={styles.card}>
           <Text style={styles.cardTitle}>4 · {t.calc.mixingTitle}</Text>
+          <Image source={require('../../assets/images/mixing-icons.png')} style={styles.mixingHero} resizeMode="contain" />
           <View style={styles.segmentedRow}>
             <Pressable testID="mix-hand" onPress={() => step(() => setMixing('hand'))} style={[styles.segBtn, mixing === 'hand' && styles.segBtnActive]}>
               <Icon name="hand-left" size={16} color={mixing === 'hand' ? '#fff' : COLORS.brand} />
@@ -592,7 +651,7 @@ export default function CalculatorHome() {
               <ResultRow label={t.calc.oilAmount} value={`${dough.main.oil} g`} />
 
               <View style={styles.subBlock}>
-                <Text style={styles.subhead}>{t.calc.totals} · {pizzas} × {dims.doughBall}g = {dough.totalDough}g</Text>
+                <Text style={styles.subhead}>{t.calc.totals} · {pizzas} × {effectiveBall}g = {dough.totalDough}g</Text>
                 <ResultRow label={t.calc.totalFlour} value={`${dough.total.flour} g`} />
                 <ResultRow label={t.calc.totalWater} value={`${dough.total.water} g`} />
                 <ResultRow label={t.calc.saltAmount} value={`${dough.total.salt} g`} />
@@ -602,7 +661,7 @@ export default function CalculatorHome() {
           ) : (
             <>
               <Text style={styles.recipeSection}>
-                6 · Ukupno tijesto · {pizzas} × {dims.doughBall}g = {dough.totalDough}g
+                6 · Ukupno tijesto · {pizzas} × {effectiveBall}g = {dough.totalDough}g
               </Text>
               {isCustom ? (
                 <>
@@ -631,7 +690,7 @@ export default function CalculatorHome() {
           <Text style={[styles.recipeSection, { marginTop: SPACING.md, paddingTop: SPACING.md, borderTopWidth: 1, borderTopColor: COLORS.divider }]}>
             Za 1 pizzu · {diameter} cm
           </Text>
-          <ResultRow label={t.calc.doughBall} value={`${dims.doughBall} g`} />
+          <ResultRow label={t.calc.doughBall} value={`${effectiveBall} g`} />
           <ResultRow label={t.calc.sauce} value={`${dims.sauce} g`} />
           <ResultRow label={t.calc.cheese} value={`${dims.cheese} g`} />
         </View>
@@ -954,6 +1013,16 @@ const styles = StyleSheet.create({
 
   card: { backgroundColor: COLORS.surfaceSecondary, padding: SPACING.lg, borderRadius: RADIUS.lg, borderWidth: 1, borderColor: COLORS.border, gap: SPACING.sm },
   cardTitle: { fontSize: 13, color: COLORS.brand, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: SPACING.sm },
+  cardTitleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  pizzaBadge: { width: 44, height: 44, marginBottom: SPACING.sm },
+  mixingHero: { width: '100%', height: 100, marginBottom: SPACING.sm },
+  stepInput: { fontSize: 15, fontWeight: '800', color: COLORS.onSurface, minWidth: 38, maxWidth: 46, textAlign: 'center', padding: 0 },
+  stepUnit: { fontSize: 12, color: COLORS.muted, fontWeight: '700', marginLeft: -2 },
+  ballRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm },
+  ballLabelCol: { flex: 1, minWidth: 0 },
+  ballStepper: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: COLORS.surface, borderRadius: RADIUS.pill, paddingHorizontal: 4, borderWidth: 1, borderColor: COLORS.border, flexShrink: 0 },
+  resetInlineBtn: { flexDirection: 'row', alignSelf: 'flex-end', alignItems: 'center', gap: 4, paddingVertical: 4, paddingHorizontal: 8 },
+  resetInlineText: { color: COLORS.muted, fontSize: 11, fontWeight: '600' },
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   label: { fontSize: 13, color: COLORS.muted, fontWeight: '600' },
   subLabel: { fontSize: 11, color: COLORS.muted, marginTop: 2 },
