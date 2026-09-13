@@ -53,8 +53,8 @@ export default function Planner() {
 
   const presets = [
     { label: `+5h (${fmt(inFiveHours)})`, date: inFiveHours },
-    { label: `+2 dana (${fmt(inTwoDays)})`, date: inTwoDays },
-    { label: `Subota 18h (${fmt(nextSat)})`, date: nextSat },
+    { label: `+2d (${fmt(inTwoDays)})`, date: inTwoDays },
+    { label: `${fmt(nextSat)}`, date: nextSat },
   ];
 
   const generate = (d: Date) => {
@@ -139,13 +139,13 @@ export default function Planner() {
 
         {/* Custom date+time entry */}
         <View style={styles.card}>
-          <Text style={styles.label}>Odaberi točan datum i vrijeme pečenja</Text>
+          <Text style={styles.label}>{t.planner.customTitle}</Text>
 
           {Platform.OS === 'web' ? (
             <View style={{ gap: SPACING.sm }}>
               <View style={styles.row}>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.microLabel}>Datum</Text>
+                  <Text style={styles.microLabel}>{t.planner.customDate}</Text>
                   <TextInput
                     testID="web-date"
                     // @ts-expect-error web-only prop
@@ -156,7 +156,7 @@ export default function Planner() {
                   />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.microLabel}>Vrijeme</Text>
+                  <Text style={styles.microLabel}>{t.planner.customTime}</Text>
                   <TextInput
                     testID="web-time"
                     // @ts-expect-error web-only prop
@@ -169,15 +169,15 @@ export default function Planner() {
               </View>
               <Pressable testID="web-apply" onPress={applyWebDateTime} style={styles.primaryBtn}>
                 <Icon name="calendar" size={16} color="#fff" />
-                <Text style={styles.primaryBtnText}>Generiraj plan</Text>
+                <Text style={styles.primaryBtnText}>{t.planner.customApply}</Text>
               </Pressable>
             </View>
           ) : (
             <Pressable testID="open-datepicker" onPress={openDatePicker} style={styles.dateBtn}>
               <Icon name="calendar-outline" size={20} color={COLORS.brand} />
               <View style={{ flex: 1 }}>
-                <Text style={styles.dateBtnLabel}>{bakeAt ? fmt(bakeAt) : 'Dodirni za odabir datuma i vremena'}</Text>
-                <Text style={styles.dateBtnSub}>{bakeAt ? 'Dodirni za promjenu' : 'Otvara se sustavski birač'}</Text>
+                <Text style={styles.dateBtnLabel}>{bakeAt ? fmt(bakeAt) : t.planner.mobilePickerHint}</Text>
+                <Text style={styles.dateBtnSub}>{bakeAt ? t.planner.mobilePickerChange : t.planner.mobilePickerHelp}</Text>
               </View>
               <Icon name="chevron-forward" size={20} color={COLORS.muted} />
             </Pressable>
@@ -196,15 +196,15 @@ export default function Planner() {
               {Platform.OS === 'ios' ? (
                 <View style={styles.iosRow}>
                   <Pressable onPress={() => setPickerMode(null)} style={[styles.iosBtn, { backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border }]}>
-                    <Text style={[styles.iosBtnText, { color: COLORS.onSurface }]}>Odustani</Text>
+                    <Text style={[styles.iosBtnText, { color: COLORS.onSurface }]}>{t.planner.cancel}</Text>
                   </Pressable>
                   {pickerMode === 'date' ? (
                     <Pressable onPress={() => setPickerMode('time')} style={[styles.iosBtn, { backgroundColor: COLORS.brand }]}>
-                      <Text style={styles.iosBtnText}>Dalje na vrijeme</Text>
+                      <Text style={styles.iosBtnText}>{t.planner.nextToTime}</Text>
                     </Pressable>
                   ) : (
                     <Pressable onPress={iosConfirm} style={[styles.iosBtn, { backgroundColor: COLORS.brand }]}>
-                      <Text style={styles.iosBtnText}>Potvrdi</Text>
+                      <Text style={styles.iosBtnText}>{t.planner.confirm}</Text>
                     </Pressable>
                   )}
                 </View>
@@ -215,7 +215,7 @@ export default function Planner() {
 
         {/* Quick presets */}
         <View style={styles.card}>
-          <Text style={styles.label}>Ili brze prečice</Text>
+          <Text style={styles.label}>{t.planner.presetsTitle}</Text>
           <View style={{ gap: SPACING.sm }}>
             {presets.map((p, i) => (
               <Pressable
@@ -237,7 +237,7 @@ export default function Planner() {
               <Text style={styles.stepsHeader}>{t.planner.steps}</Text>
               <Pressable testID="schedule-alarms" onPress={scheduleAll} style={styles.alarmBtn}>
                 <Icon name="alarm" size={16} color="#fff" />
-                <Text style={styles.alarmBtnText}>Postavi alarme</Text>
+                <Text style={styles.alarmBtnText}>{t.planner.setAlarms}</Text>
               </Pressable>
             </View>
             {steps.map((s, i) => (

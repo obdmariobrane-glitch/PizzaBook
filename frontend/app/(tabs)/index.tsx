@@ -8,7 +8,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { useT } from '../../src/i18n/LanguageProvider';
 import {
-  BIGA_STEPS, POOLISH_STEPS, RESET_LABEL,
+  BIGA_STEPS, POOLISH_STEPS,
   PHASE_TIMER_DURATIONS, TIMER_KIND_LABEL, TIMER_NOTIF, BaseTimer,
   formatDuration, formatCountdown,
 } from '../../src/i18n/prefermentSteps';
@@ -22,7 +22,10 @@ import {
 import { useAuth } from '../../src/auth';
 
 const DIAMETERS = [26, 28, 30, 33, 35, 40];
-const FLOURS: { key: FlourType; label: string; suffix: string; info?: string }[] = [
+
+type FlourEntry = { key: FlourType; label: string; suffix: string; info?: string };
+
+const FLOURS_HR: FlourEntry[] = [
   { key: 'caputo00',   label: 'Tipo 0 / 00',           suffix: 'Idealno 68%', info: 'Klasično meko brašno za neapolitansku pizzu.\n\nPrimjeri: Caputo Pizzeria, Caputo Classica, Molino Dallagiovanna Rinforzato.\n\nW faktor ~ 260–300. Idealna hidracija 65–70%.' },
   { key: 'manitoba',   label: 'Manitoba / Visoki W',   suffix: 'Idealno 75%', info: 'Jače brašno s puno glutena za dugu hladnu fermentaciju i visoku hidraciju.\n\nPrimjeri: Caputo Cuoco, Caputo Oro, Manitoba Le 5 Stagioni.\n\nW faktor 320+. Idealna hidracija 70–80%.' },
   { key: 'spelt',      label: 'Pirovo brašno',         suffix: 'Idealno 62%', info: 'Aromatično brašno stare žitarice. Kraća fermentacija, niža hidracija.\n\nČesto se koristi u mješavini 30–50% s Tipo 00 za punoću okusa.' },
@@ -30,6 +33,33 @@ const FLOURS: { key: FlourType; label: string; suffix: string; info?: string }[]
   { key: 'glutenFree', label: 'Bezglutensko brašno',   suffix: 'Idealno 80%', info: 'Poseban bezglutenski miks (npr. Caputo Fioreglut, Schär Mix B). Zahtijeva višu hidraciju i drukčiji zamjes.\n\nBez klasičnog razvoja glutena — pizza se često peče u kalupu.' },
   { key: 'custom',     label: 'Mješavina brašna (Blend)', suffix: 'Prilagođeno', info: 'Kombiniraj dva brašna A i B. Aplikacija automatski računa idealnu hidraciju kao ponderirani prosjek dvaju odabranih brašna.' },
 ];
+const FLOURS_EN: FlourEntry[] = [
+  { key: 'caputo00',   label: 'Tipo 0 / 00',       suffix: 'Ideal 68%', info: 'Classic soft wheat flour for Neapolitan pizza.\n\nExamples: Caputo Pizzeria, Caputo Classica, Molino Dallagiovanna Rinforzato.\n\nW factor ~ 260–300. Ideal hydration 65–70%.' },
+  { key: 'manitoba',   label: 'Manitoba / High W', suffix: 'Ideal 75%', info: 'Strong flour with high gluten content for long cold fermentation and high hydration.\n\nExamples: Caputo Cuoco, Caputo Oro, Manitoba Le 5 Stagioni.\n\nW factor 320+. Ideal hydration 70–80%.' },
+  { key: 'spelt',      label: 'Spelt flour',       suffix: 'Ideal 62%', info: 'Aromatic ancient grain flour. Shorter fermentation, lower hydration.\n\nOften used in 30–50% blend with Tipo 00 for rich flavor.' },
+  { key: 'wholeWheat', label: 'Whole wheat flour', suffix: 'Ideal 72%', info: 'Whole wheat flour. Higher fiber, darker color, slightly nutty flavor.\n\nBest in a 20–40% blend with Tipo 00.' },
+  { key: 'glutenFree', label: 'Gluten-free flour', suffix: 'Ideal 80%', info: 'Special gluten-free mix (e.g., Caputo Fioreglut, Schär Mix B). Requires higher hydration and different kneading.\n\nNo traditional gluten structure — pizza is often baked in a pan.' },
+  { key: 'custom',     label: 'Flour Blend',        suffix: 'Custom',    info: 'Combine two flours A and B. The app automatically calculates the ideal hydration as a weighted average of the two selected flours.' },
+];
+const FLOURS_DE: FlourEntry[] = [
+  { key: 'caputo00',   label: 'Tipo 0 / 00',           suffix: 'Ideal 68%', info: 'Klassisches Weichweizenmehl für neapolitanische Pizza.\n\nBeispiele: Caputo Pizzeria, Caputo Classica, Molino Dallagiovanna Rinforzato.\n\nW-Wert ~ 260–300. Ideale Hydratisierung 65–70%.' },
+  { key: 'manitoba',   label: 'Manitoba / Hoher W-Wert', suffix: 'Ideal 75%', info: 'Starkes Mehl mit hohem Glutengehalt für lange kalte Fermentation und hohe Hydratisierung.\n\nBeispiele: Caputo Cuoco, Caputo Oro, Manitoba Le 5 Stagioni.\n\nW-Wert 320+. Ideale Hydratisierung 70–80%.' },
+  { key: 'spelt',      label: 'Dinkelmehl',            suffix: 'Ideal 62%', info: 'Aromatisches Urgetreidemehl. Kürzere Fermentation, geringere Hydratisierung.\n\nOft in 30–50% Mischung mit Tipo 00 für vollen Geschmack.' },
+  { key: 'wholeWheat', label: 'Vollkornmehl',          suffix: 'Ideal 72%', info: 'Weizenvollkornmehl. Mehr Ballaststoffe, dunklere Farbe, leicht nussiger Geschmack.\n\nAm besten in 20–40% Mischung mit Tipo 00.' },
+  { key: 'glutenFree', label: 'Glutenfreies Mehl',     suffix: 'Ideal 80%', info: 'Spezielle glutenfreie Mischung (z.B. Caputo Fioreglut, Schär Mix B). Erfordert höhere Hydratisierung und anderes Kneten.\n\nOhne klassisches Glutennetzwerk – Pizza wird oft in der Form gebacken.' },
+  { key: 'custom',     label: 'Mehlmischung (Blend)',  suffix: 'Angepasst', info: 'Kombiniere zwei Mehle A und B. Die App berechnet automatisch die ideale Hydratisierung als gewichteten Durchschnitt der beiden gewählten Mehle.' },
+];
+const FLOURS_SL: FlourEntry[] = [
+  { key: 'caputo00',   label: 'Tipo 0 / 00',           suffix: 'Idealno 68%', info: 'Klasična mehka moka za neapeljsko pico.\n\nPrimeri: Caputo Pizzeria, Caputo Classica, Molino Dallagiovanna Rinforzato.\n\nW faktor ~ 260–300. Idealna hidracija 65–70%.' },
+  { key: 'manitoba',   label: 'Manitoba / Visok W',    suffix: 'Idealno 75%', info: 'Močna moka z veliko glutena za dolgo hladno fermentacijo in visoko hidracijo.\n\nPrimeri: Caputo Cuoco, Caputo Oro, Manitoba Le 5 Stagioni.\n\nW faktor 320+. Idealna hidracija 70–80%.' },
+  { key: 'spelt',      label: 'Pirova moka',           suffix: 'Idealno 62%', info: 'Aromatična moka iz pradavnih žit. Krajša fermentacija, nižja hidracija.\n\nPogosto uporabljena v mešanici 30–50% s Tipo 00 za bogat okus.' },
+  { key: 'wholeWheat', label: 'Polnozrnata moka',      suffix: 'Idealno 72%', info: 'Polnozrnata pšenična moka. Več vlaknin, temnejša barva, rahlo oreškast okus.\n\nNajbolje v mešanici 20–40% s Tipo 00.' },
+  { key: 'glutenFree', label: 'Brezglutenska moka',    suffix: 'Idealno 80%', info: 'Posebna brezglutenska mešanica (npr. Caputo Fioreglut, Schär Mix B). Zahteva višjo hidracijo in drugačno gnetenje.\n\nBrez klasičnega gluten mreževja — pica se pogosto peče v pekaču.' },
+  { key: 'custom',     label: 'Mešanica moke (Blend)', suffix: 'Prilagojeno', info: 'Kombiniraj dve moki A in B. Aplikacija samodejno izračuna idealno hidracijo kot tehtano povprečje obeh izbranih mok.' },
+];
+const FLOURS_BY_LANG: Record<'hr' | 'en' | 'de' | 'sl', FlourEntry[]> = {
+  hr: FLOURS_HR, en: FLOURS_EN, de: FLOURS_DE, sl: FLOURS_SL,
+};
 
 export default function CalculatorHome() {
   const insets = useSafeAreaInsets();
@@ -283,13 +313,13 @@ export default function CalculatorHome() {
             onPress={() => setFlourExpanded((v) => !v)}
             style={styles.flourHeader}
           >
-            <Text style={styles.flourHeaderText}>Vrste brašna</Text>
+            <Text style={styles.flourHeaderText}>{t.flourSection.headerCollapsed}</Text>
             <Icon name={flourExpanded ? 'chevron-up' : 'chevron-down'} size={20} color={COLORS.brand} />
           </Pressable>
 
           {flourExpanded ? (
             <View style={{ gap: 6, marginTop: SPACING.md }}>
-              {FLOURS.map((f) => {
+              {FLOURS_BY_LANG[lang].map((f) => {
                 const active = flour === f.key;
                 return (
                   <View key={f.key} style={styles.flourRowWrap}>
@@ -320,9 +350,9 @@ export default function CalculatorHome() {
           {/* Blend controls stay visible when custom is selected, even if the list is collapsed */}
           {isCustom ? (
             <View style={styles.blendPanel}>
-              <Text style={styles.blendTitle}>Sastav mješavine</Text>
+              <Text style={styles.blendTitle}>{t.flourSection.blendTitle}</Text>
 
-              <Text style={styles.label}>Brašno A ({blendPctA}%)</Text>
+              <Text style={styles.label}>{t.flourSection.blendA} ({blendPctA}%)</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
                 {BASE_FLOURS.map((k) => (
                   <Pressable key={k} testID={`blendA-${k}`} onPress={() => changeBlend('a', k)} style={[styles.chip, blendA === k && styles.chipActive]}>
@@ -331,7 +361,7 @@ export default function CalculatorHome() {
                 ))}
               </ScrollView>
 
-              <Text style={[styles.label, { marginTop: SPACING.sm }]}>Brašno B ({100 - blendPctA}%)</Text>
+              <Text style={[styles.label, { marginTop: SPACING.sm }]}>{t.flourSection.blendB} ({100 - blendPctA}%)</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
                 {BASE_FLOURS.map((k) => (
                   <Pressable key={k} testID={`blendB-${k}`} onPress={() => changeBlend('b', k)} style={[styles.chip, blendB === k && styles.chipActive]}>
@@ -341,7 +371,7 @@ export default function CalculatorHome() {
               </ScrollView>
 
               <View style={[styles.row, { marginTop: SPACING.sm }]}>
-                <Text style={styles.label}>Udio Brašna A</Text>
+                <Text style={styles.label}>{t.flourSection.blendPct}</Text>
                 <View style={styles.stepper}>
                   <Pressable testID="blendPct-minus" onPress={() => changeBlend('pct', Math.max(5, blendPctA - 5))} style={styles.stepBtn}>
                     <Icon name="remove" size={20} color={COLORS.brand} />
@@ -354,7 +384,7 @@ export default function CalculatorHome() {
               </View>
 
               <Text style={styles.hint}>
-                Idealna hidracija mješavine: {customIdeal}% ({FLOUR_PROFILES[blendA].ideal}% × {blendPctA}% + {FLOUR_PROFILES[blendB].ideal}% × {100 - blendPctA}%)
+                {t.flourSection.blendIdealHint.replace('{N}', String(customIdeal))} ({FLOUR_PROFILES[blendA].ideal}% × {blendPctA}% + {FLOUR_PROFILES[blendB].ideal}% × {100 - blendPctA}%)
               </Text>
             </View>
           ) : null}
@@ -362,10 +392,7 @@ export default function CalculatorHome() {
 
         {/* 2. VELIČINA PIZZE */}
         <View style={styles.card}>
-          <View style={styles.cardTitleRow}>
-            <Text style={styles.cardTitle}>2 · {t.calc.dimensions}</Text>
-            <Image source={require('../../assets/images/pizza-slice.png')} style={styles.pizzaBadge} />
-          </View>
+          <Text style={styles.cardTitle}>2 · {t.calc.dimensions}</Text>
           <View style={styles.row}>
             <Text style={styles.label}>{t.calc.pizzas}</Text>
             <View style={styles.stepper}>
@@ -382,9 +409,11 @@ export default function CalculatorHome() {
           {/* Ball weight (grams) — manual override */}
           <View style={[styles.ballRow, { marginTop: SPACING.sm }]}>
             <View style={styles.ballLabelCol}>
-              <Text style={styles.label}>Gramaža lopte</Text>
+              <Text style={styles.label}>{t.ballWeight.label}</Text>
               <Text style={styles.subLabel} numberOfLines={2}>
-                {customBallWeight != null ? `Ručno · zadano ${dims.doughBall}g` : `Auto po promjeru: ${dims.doughBall}g`}
+                {customBallWeight != null
+                  ? t.ballWeight.manualHint.replace('{N}', String(dims.doughBall))
+                  : t.ballWeight.autoHint.replace('{N}', String(dims.doughBall))}
               </Text>
             </View>
             <View style={styles.ballStepper}>
@@ -426,7 +455,7 @@ export default function CalculatorHome() {
               style={styles.resetInlineBtn}
             >
               <Icon name="refresh" size={12} color={COLORS.muted} />
-              <Text style={styles.resetInlineText}>Vrati automatski izračun</Text>
+              <Text style={styles.resetInlineText}>{t.ballWeight.reset}</Text>
             </Pressable>
           ) : null}
 
@@ -460,7 +489,7 @@ export default function CalculatorHome() {
                 <Text style={styles.pizzaCircleText}>{diameter} cm</Text>
               </View>
             </View>
-            <Text style={styles.pizzaPreviewHint}>Prava proporcija (referenca: 40 cm)</Text>
+            <Text style={styles.pizzaPreviewHint}>{t.pizzaPreview.hint}</Text>
           </View>
         </View>
 
@@ -516,7 +545,7 @@ export default function CalculatorHome() {
           </View>
 
           <View style={[styles.row, { marginTop: SPACING.sm }]}>
-            <Text style={styles.label}>Sati na sobnoj temp.</Text>
+            <Text style={styles.label}>{t.calc.roomHours}</Text>
             <View style={styles.stepper}>
               <Pressable testID="rh-minus" onPress={() => step(() => setRoomHours(Math.max(0, roomHours - 1)))} style={styles.stepBtn}>
                 <Icon name="remove" size={20} color={COLORS.brand} />
@@ -529,7 +558,7 @@ export default function CalculatorHome() {
           </View>
 
           <View style={[styles.row, { marginTop: SPACING.sm }]}>
-            <Text style={styles.label}>Sati u hladnjaku</Text>
+            <Text style={styles.label}>{t.calc.fridgeHours}</Text>
             <View style={styles.stepper}>
               <Pressable testID="fh-minus" onPress={() => step(() => setFridgeHours(Math.max(0, fridgeHours - 2)))} style={styles.stepBtn}>
                 <Icon name="remove" size={20} color={COLORS.brand} />
@@ -542,7 +571,7 @@ export default function CalculatorHome() {
           </View>
 
           <View style={[styles.row, { marginTop: SPACING.sm }]}>
-            <Text style={styles.label}>Temp. hladnjaka</Text>
+            <Text style={styles.label}>{t.calc.fridgeTempShort}</Text>
             <View style={styles.stepper}>
               <Pressable testID="ft-minus" onPress={() => step(() => setFridgeTemp(Math.max(2, fridgeTemp - 1)))} style={styles.stepBtn}>
                 <Icon name="remove" size={20} color={COLORS.brand} />
@@ -560,11 +589,11 @@ export default function CalculatorHome() {
           <Text style={styles.cardTitle}>4 · {t.calc.mixingTitle}</Text>
           <View style={styles.segmentedRow}>
             <Pressable testID="mix-hand" onPress={() => step(() => setMixing('hand'))} style={[styles.segBtn, mixing === 'hand' && styles.segBtnActive]}>
-              <Image source={require('../../assets/images/icon-hand.png')} style={styles.mixIcon} resizeMode="contain" />
+              <Icon name="hand-left" size={16} color={mixing === 'hand' ? '#fff' : COLORS.brand} />
               <Text style={[styles.segText, mixing === 'hand' && { color: '#fff' }]}>{t.calc.handMixTitle}</Text>
             </Pressable>
             <Pressable testID="mix-mixer" onPress={() => step(() => setMixing('mixer'))} style={[styles.segBtn, mixing === 'mixer' && styles.segBtnActive]}>
-              <Image source={require('../../assets/images/icon-mixer.png')} style={styles.mixIcon} resizeMode="contain" />
+              <Icon name="cog" size={16} color={mixing === 'mixer' ? '#fff' : COLORS.brand} />
               <Text style={[styles.segText, mixing === 'mixer' && { color: '#fff' }]}>{t.calc.mixerTitle}</Text>
             </Pressable>
           </View>
@@ -615,7 +644,7 @@ export default function CalculatorHome() {
               )}
               <Pressable testID="reset-steps" onPress={resetStepsForCurrent} style={styles.resetBtn}>
                 <Icon name="refresh" size={14} color={COLORS.muted} />
-                <Text style={styles.resetBtnText}>{RESET_LABEL[lang]}</Text>
+                <Text style={styles.resetBtnText}>{t.resetStepsBtn}</Text>
               </Pressable>
             </View>
           ) : null}
@@ -625,8 +654,8 @@ export default function CalculatorHome() {
         <View style={styles.card}>
           <Text style={styles.cardTitle}>5 · {t.calc.baking}</Text>
           <View style={styles.ovenRow}>
-            <OvenCard active={oven === 'homeStone'} onPress={() => step(() => setOven('homeStone'))} imageSrc={require('../../assets/images/icon-home-oven.png')} title={t.calc.homeStone} testID="oven-homeStone" />
-            <OvenCard active={oven === 'ooni'} onPress={() => step(() => setOven('ooni'))} imageSrc={require('../../assets/images/icon-ooni.png')} title={t.calc.ooni} testID="oven-ooni" />
+            <OvenCard active={oven === 'homeStone'} onPress={() => step(() => setOven('homeStone'))} icon="home" title={t.calc.homeStone} testID="oven-homeStone" />
+            <OvenCard active={oven === 'ooni'} onPress={() => step(() => setOven('ooni'))} icon="flame" title={t.calc.ooni} testID="oven-ooni" />
             <OvenCard active={oven === 'homePan'} onPress={() => step(() => setOven('homePan'))} icon="restaurant" title={t.calc.homePan} testID="oven-homePan" />
           </View>
           <View style={styles.bakeInstructions}>
@@ -647,18 +676,18 @@ export default function CalculatorHome() {
               </Text>
               <ResultRow label={t.calc.totalFlour} value={`${dough.preferment.flour} g`} highlight />
               <ResultRow label={t.calc.totalWater} value={`${dough.preferment.water} g`} highlight />
-              <ResultRow label={t.calc.yeastAmount + ' (svježi)'} value={`${dough.preferment.yeast} g`} />
+              <ResultRow label={t.calc.yeastAmount + ' (' + t.calc.freshYeastShort + ')'} value={`${dough.preferment.yeast} g`} />
               {method === 'poolish' ? (
-                <Text style={styles.hint}>+ kap meda za bolju aktivaciju · 12-14h na 18-20°C</Text>
+                <Text style={styles.hint}>{t.calc.poolishHint}</Text>
               ) : (
-                <Text style={styles.hint}>16-18h fermentacija na 18-20°C prije glavnog zamjesa</Text>
+                <Text style={styles.hint}>{t.calc.bigaHint}</Text>
               )}
 
               <Text style={[styles.recipeSection, { marginTop: SPACING.md }]}>{t.calc.mainDough}</Text>
               <ResultRow label={t.calc.remainingFlour} value={`${dough.main.flour} g`} highlight />
               {ice ? (
                 <>
-                  <ResultRow label={`${t.calc.coldWater} (preostala)`} value={`${Math.max(0, dough.main.water - ice.ice)} g`} />
+                  <ResultRow label={`${t.calc.coldWater} (${t.calc.remainingLabel})`} value={`${Math.max(0, dough.main.water - ice.ice)} g`} />
                   <ResultRow label={`🧊 ${t.calc.iceAmount}`} value={`${ice.ice} g`} highlight />
                 </>
               ) : (
@@ -678,16 +707,16 @@ export default function CalculatorHome() {
           ) : (
             <>
               <Text style={styles.recipeSection}>
-                6 · Ukupno tijesto · {pizzas} × {effectiveBall}g = {dough.totalDough}g
+                6 · {t.calc.totalDough} · {pizzas} × {effectiveBall}g = {dough.totalDough}g
               </Text>
               {isCustom ? (
                 <>
                   <ResultRow label={`${FLOUR_PROFILES[blendA].label} (${blendPctA}%)`} value={`${Math.round(dough.main.flour * blendPctA / 100)} g`} highlight />
                   <ResultRow label={`${FLOUR_PROFILES[blendB].label} (${100 - blendPctA}%)`} value={`${Math.round(dough.main.flour * (100 - blendPctA) / 100)} g`} highlight />
-                  <ResultRow label="Ukupno brašno" value={`${dough.main.flour} g`} />
+                  <ResultRow label={t.calc.totalFlour} value={`${dough.main.flour} g`} />
                 </>
               ) : (
-                <ResultRow label={`Brašno (${flourProfile.label})`} value={`${dough.main.flour} g`} highlight />
+                <ResultRow label={`${t.calc.flourLabel} (${flourProfile.label})`} value={`${dough.main.flour} g`} highlight />
               )}
               {ice ? (
                 <>
@@ -698,14 +727,14 @@ export default function CalculatorHome() {
                 <ResultRow label={`${t.calc.totalWater} (${dough.waterTemp}°C)`} value={`${dough.main.water} g`} highlight />
               )}
               <ResultRow label={t.calc.saltAmount} value={`${dough.main.salt} g`} />
-              <ResultRow label={`${t.calc.yeastAmount} (svježi, ${dough.yeastPct}%)`} value={`${dough.main.yeast} g`} />
+              <ResultRow label={`${t.calc.yeastAmount} (${t.calc.freshYeastShort}, ${dough.yeastPct}%)`} value={`${dough.main.yeast} g`} />
               <ResultRow label={t.calc.oilAmount} value={`${dough.main.oil} g`} />
             </>
           )}
 
           {/* Per-pizza normative — BELOW total */}
           <Text style={[styles.recipeSection, { marginTop: SPACING.md, paddingTop: SPACING.md, borderTopWidth: 1, borderTopColor: COLORS.divider }]}>
-            Za 1 pizzu · {diameter} cm
+            {t.calc.perPizza} · {diameter} cm
           </Text>
           <ResultRow label={t.calc.doughBall} value={`${effectiveBall} g`} />
           <ResultRow label={t.calc.sauce} value={`${dims.sauce} g`} />
@@ -720,14 +749,14 @@ export default function CalculatorHome() {
           </Pressable>
           <Pressable testID="share-community" style={[styles.actionBtn, { backgroundColor: COLORS.brand }]} onPress={onShare}>
             <Icon name="share" size={18} color="#fff" />
-            <Text style={[styles.actionBtnText, { color: '#fff' }]}>Podijeli na Zid</Text>
+            <Text style={[styles.actionBtnText, { color: '#fff' }]}>{t.calc.shareToFeed}</Text>
           </Pressable>
         </View>
 
         {/* Footer links */}
         <View style={styles.moreRow}>
           <MoreLink icon="book" label={t.calc.school} onPress={() => setMoreTool('school')} testID="more-school" />
-          <MoreLink imageSrc={require('../../assets/images/icon-leftover.png')} label={t.calc.leftover} onPress={() => setMoreTool('leftover')} testID="more-leftover" />
+          <MoreLink icon="restaurant-outline" label={t.calc.leftover} onPress={() => setMoreTool('leftover')} testID="more-leftover" />
         </View>
 
       </ScrollView>
