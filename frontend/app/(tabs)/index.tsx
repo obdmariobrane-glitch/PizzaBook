@@ -261,7 +261,7 @@ export default function CalculatorHome() {
 
   return (
     <ImageBackground
-      source={{ uri: 'https://images.unsplash.com/photo-1584448097639-99cf648e8def?w=600&q=60' }}
+      source={require('../../assets/images/bg-wood-flour.png')}
       style={[styles.root, { paddingTop: insets.top }]}
       imageStyle={styles.rootBgImage}
       resizeMode="cover"
@@ -564,7 +564,7 @@ export default function CalculatorHome() {
               <Text style={[styles.segText, mixing === 'hand' && { color: '#fff' }]}>{t.calc.handMixTitle}</Text>
             </Pressable>
             <Pressable testID="mix-mixer" onPress={() => step(() => setMixing('mixer'))} style={[styles.segBtn, mixing === 'mixer' && styles.segBtnActive]}>
-              <Image source={require('../../assets/images/icon-cog.png')} style={styles.mixIcon} resizeMode="contain" />
+              <Image source={require('../../assets/images/icon-mixer.png')} style={styles.mixIcon} resizeMode="contain" />
               <Text style={[styles.segText, mixing === 'mixer' && { color: '#fff' }]}>{t.calc.mixerTitle}</Text>
             </Pressable>
           </View>
@@ -625,8 +625,8 @@ export default function CalculatorHome() {
         <View style={styles.card}>
           <Text style={styles.cardTitle}>5 · {t.calc.baking}</Text>
           <View style={styles.ovenRow}>
-            <OvenCard active={oven === 'homeStone'} onPress={() => step(() => setOven('homeStone'))} icon="home" title={t.calc.homeStone} testID="oven-homeStone" />
-            <OvenCard active={oven === 'ooni'} onPress={() => step(() => setOven('ooni'))} icon="flame" title={t.calc.ooni} testID="oven-ooni" />
+            <OvenCard active={oven === 'homeStone'} onPress={() => step(() => setOven('homeStone'))} imageSrc={require('../../assets/images/icon-home-oven.png')} title={t.calc.homeStone} testID="oven-homeStone" />
+            <OvenCard active={oven === 'ooni'} onPress={() => step(() => setOven('ooni'))} imageSrc={require('../../assets/images/icon-ooni.png')} title={t.calc.ooni} testID="oven-ooni" />
             <OvenCard active={oven === 'homePan'} onPress={() => step(() => setOven('homePan'))} icon="restaurant" title={t.calc.homePan} testID="oven-homePan" />
           </View>
           <View style={styles.bakeInstructions}>
@@ -727,7 +727,7 @@ export default function CalculatorHome() {
         {/* Footer links */}
         <View style={styles.moreRow}>
           <MoreLink icon="book" label={t.calc.school} onPress={() => setMoreTool('school')} testID="more-school" />
-          <MoreLink icon="restaurant-outline" label={t.calc.leftover} onPress={() => setMoreTool('leftover')} testID="more-leftover" />
+          <MoreLink imageSrc={require('../../assets/images/icon-leftover.png')} label={t.calc.leftover} onPress={() => setMoreTool('leftover')} testID="more-leftover" />
         </View>
 
       </ScrollView>
@@ -875,21 +875,29 @@ function PhaseBlock({
   );
 }
 
-function OvenCard({ active, onPress, icon, title, testID }: any) {
+function OvenCard({ active, onPress, icon, imageSrc, title, testID }: any) {
   return (
     <Pressable testID={testID} onPress={onPress} style={[styles.ovenCard, active && styles.ovenCardActive]}>
       <View style={[styles.ovenIconWrap, active && styles.ovenIconWrapActive]}>
-        <Icon name={icon} size={28} color={active ? '#fff' : COLORS.brand} />
+        {imageSrc ? (
+          <Image source={imageSrc} style={styles.ovenImage} resizeMode="contain" />
+        ) : (
+          <Icon name={icon} size={28} color={active ? '#fff' : COLORS.brand} />
+        )}
       </View>
       <Text style={[styles.ovenText, active && { color: '#fff' }]} numberOfLines={2}>{title}</Text>
     </Pressable>
   );
 }
 
-function MoreLink({ icon, label, onPress, testID }: any) {
+function MoreLink({ icon, imageSrc, label, onPress, testID }: any) {
   return (
     <Pressable testID={testID} onPress={onPress} style={styles.moreLink}>
-      <Icon name={icon} size={16} color={COLORS.brand} />
+      {imageSrc ? (
+        <Image source={imageSrc} style={styles.moreLinkImg} resizeMode="contain" />
+      ) : (
+        <Icon name={icon} size={16} color={COLORS.brand} />
+      )}
       <Text style={styles.moreLinkText}>{label}</Text>
     </Pressable>
   );
@@ -1023,7 +1031,7 @@ function ShoppingModal({ onClose }: { onClose: () => void }) {
 // ============= STYLES =============
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: COLORS.surface },
-  rootBgImage: { opacity: 0.18 },
+  rootBgImage: { opacity: 1 },
   header: { paddingHorizontal: SPACING.lg, paddingVertical: SPACING.md, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   logo: { width: 32, height: 32, borderRadius: 16, backgroundColor: COLORS.brandTertiary, alignItems: 'center', justifyContent: 'center' },
   title: { fontSize: 22, fontWeight: '800', color: COLORS.onSurface, letterSpacing: -0.5 },
@@ -1034,7 +1042,7 @@ const styles = StyleSheet.create({
   cardTitleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   pizzaBadge: { width: 44, height: 44, marginBottom: SPACING.sm },
   mixingHero: { width: '100%', height: 100, marginBottom: SPACING.sm },
-  mixIcon: { width: 22, height: 22 },
+  mixIcon: { width: 24, height: 24 },
   // Proportional pizza preview
   pizzaPreviewWrap: { alignItems: 'center', marginTop: SPACING.md, paddingTop: SPACING.md, borderTopWidth: 1, borderTopColor: COLORS.divider, gap: 6 },
   pizzaScale: { width: 200, height: 200, alignItems: 'center', justifyContent: 'center' },
@@ -1132,6 +1140,7 @@ const styles = StyleSheet.create({
   ovenCardActive: { backgroundColor: COLORS.brand, borderColor: COLORS.brand },
   ovenIconWrap: { width: 52, height: 52, borderRadius: RADIUS.md, backgroundColor: COLORS.brandTertiary, alignItems: 'center', justifyContent: 'center' },
   ovenIconWrapActive: { backgroundColor: 'rgba(255,255,255,0.2)' },
+  ovenImage: { width: 44, height: 44 },
   ovenEmoji: { fontSize: 30 },
   ovenText: { color: COLORS.onSurface, fontSize: 11, fontWeight: '700', textAlign: 'center' },
   bakeInstructions: { marginTop: SPACING.md, gap: SPACING.sm, paddingTop: SPACING.md, borderTopWidth: 1, borderTopColor: COLORS.divider },
@@ -1153,6 +1162,7 @@ const styles = StyleSheet.create({
 
   moreRow: { flexDirection: 'row', gap: SPACING.md, justifyContent: 'center', paddingVertical: SPACING.md },
   moreLink: { flexDirection: 'row', gap: 6, alignItems: 'center' },
+  moreLinkImg: { width: 22, height: 22 },
   moreLinkText: { color: COLORS.brand, fontSize: 13, fontWeight: '600' },
 
   modalRoot: { flex: 1, backgroundColor: COLORS.surface },
