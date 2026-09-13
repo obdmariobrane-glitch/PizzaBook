@@ -1002,17 +1002,27 @@ function ShoppingModal({ onClose }: { onClose: () => void }) {
     );
   }
 
+  const methodLabel = recipe.method === 'biga' ? t.calc.biga : recipe.method === 'poolish' ? t.calc.poolish : t.calc.direct;
+  const ing = t.shopping.ingredients;
+
   const items = [
-    { key: 'flour', qty: `${recipe.flour} g`, name: `Brašno (${recipe.flourType || '00'})` },
-    { key: 'water', qty: `${recipe.water} g`, name: 'Voda' },
-    { key: 'salt', qty: `${recipe.salt} g`, name: 'Sol' },
-    { key: 'yeast', qty: `${recipe.yeast} g`, name: 'Kvasac' },
-    ...(recipe.oil > 0 ? [{ key: 'oil', qty: `${recipe.oil} g`, name: 'Maslinovo ulje' }] : []),
-    ...(recipe.sauce ? [{ key: 'sauce', qty: `${recipe.sauce} g`, name: 'Pelat / rajčica' }] : []),
-    ...(recipe.cheese ? [{ key: 'cheese', qty: `${recipe.cheese} g`, name: 'Mozzarella / Fior di Latte' }] : []),
+    { key: 'flour', qty: `${recipe.flour} g`, name: `${ing.flour} (${recipe.flourType || '00'})` },
+    { key: 'water', qty: `${recipe.water} g`, name: ing.water },
+    { key: 'salt', qty: `${recipe.salt} g`, name: ing.salt },
+    { key: 'yeast', qty: `${recipe.yeast} g`, name: ing.yeast },
+    ...(recipe.oil > 0 ? [{ key: 'oil', qty: `${recipe.oil} g`, name: ing.oil }] : []),
+    ...(recipe.sauce ? [{ key: 'sauce', qty: `${recipe.sauce} g`, name: ing.sauce }] : []),
+    ...(recipe.cheese ? [{ key: 'cheese', qty: `${recipe.cheese} g`, name: ing.cheese }] : []),
   ];
 
-  const listText = `Pizzabook - Recept za ${recipe.pizzas} pizze:\n\n` +
+  const headerText = t.shopping.headerFmt
+    .replace('{N}', String(recipe.pizzas))
+    .replace('{H}', String(recipe.hydration))
+    .replace('{M}', methodLabel);
+
+  const copyHeader = t.shopping.copyHeaderFmt.replace('{N}', String(recipe.pizzas));
+
+  const listText = `${copyHeader}\n\n` +
     items.map((it) => `☐ ${it.qty} — ${it.name}`).join('\n');
 
   const doCopy = async () => {
@@ -1034,7 +1044,7 @@ function ShoppingModal({ onClose }: { onClose: () => void }) {
       <ScrollView contentContainerStyle={{ padding: SPACING.lg, gap: SPACING.md, paddingBottom: SPACING.xxxl }}>
         <Text style={{ color: COLORS.muted, fontSize: 13 }}>{t.shopping.subtitle}</Text>
         <View style={styles.recipeCard}>
-          <Text style={styles.recipeSection}>Za {recipe.pizzas} pizze · {recipe.hydration}% · {recipe.method}</Text>
+          <Text style={styles.recipeSection}>{headerText}</Text>
           {items.map((it) => (
             <Pressable
               key={it.key}
