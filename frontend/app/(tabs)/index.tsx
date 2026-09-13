@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, Modal, TextInput, Platform, Alert, Image } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, Modal, TextInput, Platform, Alert, Image, ImageBackground } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import Icon from '@react-native-vector-icons/ionicons';
@@ -260,7 +260,12 @@ export default function CalculatorHome() {
     oven === 'ooni' ? '430–480°C · 60–90 s' : '280°C · 8–10 min';
 
   return (
-    <View style={[styles.root, { paddingTop: insets.top }]}>
+    <ImageBackground
+      source={{ uri: 'https://images.unsplash.com/photo-1584448097639-99cf648e8def?w=600&q=60' }}
+      style={[styles.root, { paddingTop: insets.top }]}
+      imageStyle={styles.rootBgImage}
+      resizeMode="cover"
+    >
       <View style={styles.header}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACING.sm }}>
           <View style={styles.logo}><Text style={{ fontSize: 20 }}>🍕</Text></View>
@@ -779,7 +784,7 @@ export default function CalculatorHome() {
           </Pressable>
         </Pressable>
       </Modal>
-    </View>
+    </ImageBackground>
   );
 }
 
@@ -1018,6 +1023,7 @@ function ShoppingModal({ onClose }: { onClose: () => void }) {
 // ============= STYLES =============
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: COLORS.surface },
+  rootBgImage: { opacity: 0.18 },
   header: { paddingHorizontal: SPACING.lg, paddingVertical: SPACING.md, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   logo: { width: 32, height: 32, borderRadius: 16, backgroundColor: COLORS.brandTertiary, alignItems: 'center', justifyContent: 'center' },
   title: { fontSize: 22, fontWeight: '800', color: COLORS.onSurface, letterSpacing: -0.5 },

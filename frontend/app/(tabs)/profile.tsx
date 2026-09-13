@@ -64,16 +64,17 @@ export default function Profile() {
           </View>
           <View style={styles.card}>
             <Text style={styles.section}>{t.profile.language}</Text>
-            <View style={{ flexDirection: 'row', gap: SPACING.sm }}>
+            <View style={{ gap: SPACING.sm }}>
               {LANGS.map((l) => (
                 <Pressable
                   key={l.code}
                   testID={`lang-${l.code}`}
                   onPress={() => setLang(l.code as Lang)}
-                  style={[styles.langChip, lang === l.code && styles.langChipActive]}
+                  style={[styles.langRow, lang === l.code && styles.langRowActive]}
                 >
                   <Text style={[styles.langFlag, lang === l.code && { color: '#fff' }]}>{l.flag}</Text>
-                  <Text style={[styles.langLabel, lang === l.code && { color: '#fff' }]}>{l.label}</Text>
+                  <Text style={[styles.langLabel, lang === l.code && { color: '#fff', fontWeight: '700' }]}>{l.label}</Text>
+                  {lang === l.code ? <Icon name="checkmark-circle" size={18} color="#fff" /> : null}
                 </Pressable>
               ))}
             </View>
@@ -155,16 +156,17 @@ export default function Profile() {
 
         <View style={styles.card}>
           <Text style={styles.section}>{t.profile.language}</Text>
-          <View style={{ flexDirection: 'row', gap: SPACING.sm }}>
+          <View style={{ gap: SPACING.sm }}>
             {LANGS.map((l) => (
               <Pressable
                 key={l.code}
                 testID={`lang-${l.code}`}
                 onPress={() => setLang(l.code as Lang)}
-                style={[styles.langChip, lang === l.code && styles.langChipActive]}
+                style={[styles.langRow, lang === l.code && styles.langRowActive]}
               >
                 <Text style={[styles.langFlag, lang === l.code && { color: '#fff' }]}>{l.flag}</Text>
-                <Text style={[styles.langLabel, lang === l.code && { color: '#fff' }]}>{l.label}</Text>
+                <Text style={[styles.langLabel, lang === l.code && { color: '#fff', fontWeight: '700' }]}>{l.label}</Text>
+                {lang === l.code ? <Icon name="checkmark-circle" size={18} color="#fff" /> : null}
               </Pressable>
             ))}
           </View>
@@ -202,8 +204,10 @@ const styles = StyleSheet.create({
   saveBtnText: { color: '#fff', fontWeight: '700', fontSize: 15 },
   langChip: { flexDirection: 'row', gap: 6, alignItems: 'center', paddingHorizontal: SPACING.md, paddingVertical: 8, borderRadius: RADIUS.pill, borderWidth: 1, borderColor: COLORS.border },
   langChipActive: { backgroundColor: COLORS.brand, borderColor: COLORS.brand },
-  langFlag: { fontSize: 11, color: COLORS.muted, fontWeight: '800' },
-  langLabel: { fontSize: 13, color: COLORS.onSurface, fontWeight: '600' },
+  langRow: { flexDirection: 'row', gap: SPACING.md, alignItems: 'center', paddingHorizontal: SPACING.md, paddingVertical: 12, borderRadius: RADIUS.md, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.surface },
+  langRowActive: { backgroundColor: COLORS.brand, borderColor: COLORS.brand },
+  langFlag: { fontSize: 12, color: COLORS.muted, fontWeight: '800', minWidth: 22 },
+  langLabel: { flex: 1, fontSize: 15, color: COLORS.onSurface, fontWeight: '600' },
   logoutBtn: { flexDirection: 'row', gap: SPACING.sm, alignItems: 'center', justifyContent: 'center', paddingVertical: SPACING.md, borderRadius: RADIUS.md, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.surfaceSecondary },
   logoutText: { color: COLORS.error, fontSize: 15, fontWeight: '700' },
 });
