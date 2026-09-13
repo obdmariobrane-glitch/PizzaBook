@@ -10,7 +10,7 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     AsyncStorage.getItem('lang').then(v => {
-      if (v === 'hr' || v === 'en' || v === 'de') setLangState(v);
+      if (v === 'hr' || v === 'en' || v === 'de' || v === 'sl') setLangState(v);
     });
   }, []);
 

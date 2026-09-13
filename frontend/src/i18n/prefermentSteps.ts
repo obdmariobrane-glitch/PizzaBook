@@ -381,7 +381,7 @@ export const POOLISH_STEPS: Record<Lang, MethodSteps> = {
 export const RESET_LABEL: Record<Lang, string> = {
   hr: 'Poništi označene korake',
   en: 'Reset checked steps',
-  de: 'Markierungen zurücksetzen',
+  de: 'Markierte Schritte zurücksetzen',
   sl: 'Ponastavi označene korake',
 };
 
@@ -476,9 +476,9 @@ export const PHASE_TIMER_DURATIONS: Record<string, BaseTimer[]> = {
 // Localized short label per kind
 export const TIMER_KIND_LABEL: Record<Lang, Record<TimerKind, string>> = {
   hr: { rt: 'Sobna', fridge: 'Frižider', rest: 'Odmor', ballsRt: 'Loptice RT', ballsFridge: 'Loptice frižider', preBake: 'Prije pečenja' },
-  en: { rt: 'Room',   fridge: 'Fridge',   rest: 'Rest',  ballsRt: 'Balls RT',   ballsFridge: 'Balls fridge',    preBake: 'Before bake' },
-  de: { rt: 'Raum',   fridge: 'Kühl.',    rest: 'Ruhe',  ballsRt: 'Kugeln RT',  ballsFridge: 'Kugeln Kühl.',    preBake: 'Vor dem Backen' },
-  sl: { rt: 'Sobna',  fridge: 'Hladilnik',rest: 'Počitek',ballsRt: 'Kepice RT', ballsFridge: 'Kepice hlad.',    preBake: 'Pred peko' },
+  en: { rt: 'Room temp', fridge: 'Fridge', rest: 'Rest', ballsRt: 'Balls RT', ballsFridge: 'Balls Fridge', preBake: 'Before baking' },
+  de: { rt: 'Raumtemp.', fridge: 'Kühlschrank', rest: 'Ruhezeit', ballsRt: 'Kugeln RT', ballsFridge: 'Kugeln Kühlschrank', preBake: 'Vor dem Backen' },
+  sl: { rt: 'Sobna', fridge: 'Hladilnik', rest: 'Počitek', ballsRt: 'Kroglice RT', ballsFridge: 'Kroglice hladilnik', preBake: 'Pred peko' },
 };
 
 // Localized notification content
@@ -491,23 +491,23 @@ export const TIMER_NOTIF: Record<Lang, { title: string; body: (label: string) =>
     expiredAlertBody: (l) => `${l} — vrijeme je isteklo!`,
   },
   en: {
-    title: '🍕 Pizzabook · Phase done',
-    body: (l) => `${l} — time is up. Move to the next step.`,
+    title: '🍕 Pizzabook · Phase finished',
+    body: (l) => `${l} — time is up. Move to next step.`,
     running: 'Running',
-    expiredAlertTitle: 'Phase done',
+    expiredAlertTitle: 'Phase finished',
     expiredAlertBody: (l) => `${l} — time is up!`,
   },
   de: {
-    title: '🍕 Pizzabook · Phase fertig',
-    body: (l) => `${l} — Zeit ist um. Weiter zum nächsten Schritt.`,
-    running: 'Läuft',
-    expiredAlertTitle: 'Phase fertig',
-    expiredAlertBody: (l) => `${l} — Zeit ist um!`,
+    title: '🍕 Pizzabook · Phase beendet',
+    body: (l) => `${l} — Zeit ist abgelaufen. Gehe zum nächsten Schritt.`,
+    running: 'In Bearbeitung',
+    expiredAlertTitle: 'Phase beendet',
+    expiredAlertBody: (l) => `${l} — Zeit ist abgelaufen!`,
   },
   sl: {
     title: '🍕 Pizzabook · Faza končana',
     body: (l) => `${l} — čas je potekel. Pojdi na naslednji korak.`,
-    running: 'Poteka',
+    running: 'V teku',
     expiredAlertTitle: 'Faza končana',
     expiredAlertBody: (l) => `${l} — čas je potekel!`,
   },
