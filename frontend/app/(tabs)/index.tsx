@@ -444,6 +444,19 @@ export default function CalculatorHome() {
               style={styles.customInput}
             />
           </ScrollView>
+
+          {/* Proportional pizza preview — real-size ratio (26 vs 40 cm) */}
+          <View style={styles.pizzaPreviewWrap}>
+            <View style={styles.pizzaScale}>
+              {/* Faded reference: 40cm (max) */}
+              <View style={[styles.pizzaCircleGhost, { width: 200, height: 200 }]} />
+              {/* Current diameter — scales relative to 40cm max */}
+              <View style={[styles.pizzaCircle, { width: 200 * (diameter / 40), height: 200 * (diameter / 40) }]}>
+                <Text style={styles.pizzaCircleText}>{diameter} cm</Text>
+              </View>
+            </View>
+            <Text style={styles.pizzaPreviewHint}>Prava proporcija (referenca: 40 cm)</Text>
+          </View>
         </View>
 
         {/* 3. METHOD + HYDRATION + TEMP */}
@@ -540,14 +553,13 @@ export default function CalculatorHome() {
         {/* 4. MIXING */}
         <View style={styles.card}>
           <Text style={styles.cardTitle}>4 · {t.calc.mixingTitle}</Text>
-          <Image source={require('../../assets/images/mixing-icons.png')} style={styles.mixingHero} resizeMode="contain" />
           <View style={styles.segmentedRow}>
             <Pressable testID="mix-hand" onPress={() => step(() => setMixing('hand'))} style={[styles.segBtn, mixing === 'hand' && styles.segBtnActive]}>
-              <Icon name="hand-left" size={16} color={mixing === 'hand' ? '#fff' : COLORS.brand} />
+              <Image source={require('../../assets/images/icon-hand.png')} style={styles.mixIcon} resizeMode="contain" />
               <Text style={[styles.segText, mixing === 'hand' && { color: '#fff' }]}>{t.calc.handMixTitle}</Text>
             </Pressable>
             <Pressable testID="mix-mixer" onPress={() => step(() => setMixing('mixer'))} style={[styles.segBtn, mixing === 'mixer' && styles.segBtnActive]}>
-              <Icon name="cog" size={16} color={mixing === 'mixer' ? '#fff' : COLORS.brand} />
+              <Image source={require('../../assets/images/icon-cog.png')} style={styles.mixIcon} resizeMode="contain" />
               <Text style={[styles.segText, mixing === 'mixer' && { color: '#fff' }]}>{t.calc.mixerTitle}</Text>
             </Pressable>
           </View>
@@ -1016,6 +1028,14 @@ const styles = StyleSheet.create({
   cardTitleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   pizzaBadge: { width: 44, height: 44, marginBottom: SPACING.sm },
   mixingHero: { width: '100%', height: 100, marginBottom: SPACING.sm },
+  mixIcon: { width: 22, height: 22 },
+  // Proportional pizza preview
+  pizzaPreviewWrap: { alignItems: 'center', marginTop: SPACING.md, paddingTop: SPACING.md, borderTopWidth: 1, borderTopColor: COLORS.divider, gap: 6 },
+  pizzaScale: { width: 200, height: 200, alignItems: 'center', justifyContent: 'center' },
+  pizzaCircleGhost: { position: 'absolute', borderRadius: 100, borderWidth: 1, borderColor: COLORS.border, borderStyle: 'dashed', backgroundColor: 'transparent' },
+  pizzaCircle: { borderRadius: 100, backgroundColor: COLORS.brandTertiary, borderWidth: 2, borderColor: COLORS.brand, alignItems: 'center', justifyContent: 'center' },
+  pizzaCircleText: { color: COLORS.brand, fontSize: 15, fontWeight: '800' },
+  pizzaPreviewHint: { fontSize: 11, color: COLORS.muted, fontStyle: 'italic' },
   stepInput: { fontSize: 15, fontWeight: '800', color: COLORS.onSurface, minWidth: 38, maxWidth: 46, textAlign: 'center', padding: 0 },
   stepUnit: { fontSize: 12, color: COLORS.muted, fontWeight: '700', marginLeft: -2 },
   ballRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm },
