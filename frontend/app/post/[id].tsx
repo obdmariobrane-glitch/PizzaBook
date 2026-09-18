@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, ActivityIndicator, Platform, KeyboardAvoidingView } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -21,17 +21,13 @@ export default function PostDetail() {
   const [text, setText] = useState('');
   const [posting, setPosting] = useState(false);
 
-  const load = useCallback(async () => {
-    try {
-      const [p, c] = await Promise.all([
-        api(`/api/posts/${id}`),
-        api(`/api/posts/${id}/comments`),
-      ]);
-      setPost(p); setComments(c);
-    } catch {}
+  useEffect(() => {
+    let mounted = true;
+    void Promise.all([api(`/api/posts/${id}`), api(`/api/posts/${id}/comments`)]).then(([p, c]) => {
+      if (mounted) { setPost(p); setComments(c); }
+    }).catch(() => {});
+    return () => { mounted = false; };
   }, [id]);
-
-  useEffect(() => { load(); }, [load]);
 
   const submitComment = async () => {
     if (!text.trim()) return;
@@ -84,6 +80,7 @@ export default function PostDetail() {
           {post.recipe ? (
             <View style={styles.recipeCard}>
               <Text style={styles.recipeTitle}>{t.feed.recipe}</Text>
+              {post.recipe.style_id && t.calc.pizzaStyles[post.recipe.style_id as keyof typeof t.calc.pizzaStyles] ? <RecipeLine label={t.calc.pizzaStyle} value={t.calc.pizzaStyles[post.recipe.style_id as keyof typeof t.calc.pizzaStyles].name} /> : null}
               {post.recipe.hydration ? <RecipeLine label={t.feed.hydration} value={`${post.recipe.hydration}%`} /> : null}
               {post.recipe.method ? <RecipeLine label={t.feed.method} value={post.recipe.method} /> : null}
               {post.recipe.dough_weight ? <RecipeLine label={t.calc.doughBall} value={`${post.recipe.dough_weight} g`} /> : null}

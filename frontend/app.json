@@ -2,7 +2,7 @@
   "expo": {
     "name": "Pizzabook",
     "slug": "pizzabook",
-    "version": "1.0.0",
+    "version": "1.0.2",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "frontend",
@@ -12,6 +12,7 @@
       "bundleIdentifier": "com.emergent.doughtimer.ia80uq"
     },
     "android": {
+      "versionCode": 3,
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#000000"
@@ -29,7 +30,7 @@
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/splash-image.png",
+          "image": "./assets/images/pizza-splash.png",
           "imageWidth": 200,
           "resizeMode": "contain",
           "backgroundColor": "#000000"
@@ -45,6 +46,13 @@
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "router": {},
+      "updateManifestUrl": "https://raw.githubusercontent.com/branimirjeli-svg/pizzabook-updates/main/update.json",
+      "eas": {
+        "projectId": "0d36eeb4-694f-4640-bd26-583ab48a9611"
+      }
     }
   }
 }

@@ -85,6 +85,8 @@ export default function NewPost() {
             diameter_cm: recipe.diameter,
             hydration: recipe.hydration,
             method: recipe.method,
+            style_id: recipe.style_id,
+            style_params: recipe.style_params,
             flour_type: recipe.flourType,
             dough_weight: recipe.ballWeight,
           } : null,
@@ -154,7 +156,7 @@ export default function NewPost() {
             <View style={{ flex: 1 }}>
               <Text style={styles.recipeTitle}>{t.feed.attachRecipe}</Text>
               <Text style={styles.recipeMeta}>
-                {recipe.hydration}% · {recipe.method} · {recipe.ballWeight}g
+                {recipe.style_id ? t.calc.pizzaStyles[recipe.style_id as keyof typeof t.calc.pizzaStyles].name : ''} · {recipe.hydration}% · {recipe.method} · {recipe.ballWeight}g
               </Text>
             </View>
           </Pressable>
@@ -185,7 +187,7 @@ const styles = StyleSheet.create({
   pickerEmpty: { alignItems: 'center', gap: SPACING.sm },
   pickerText: { color: COLORS.brand, fontWeight: '600' },
   image: { width: '100%', height: '100%' },
-  uploadOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.4)', alignItems: 'center', justifyContent: 'center' },
+  uploadOverlay: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(0,0,0,0.4)', alignItems: 'center', justifyContent: 'center' },
   label: { fontSize: 13, color: COLORS.muted, fontWeight: '700', textTransform: 'uppercase', marginBottom: SPACING.sm },
   input: { backgroundColor: COLORS.surfaceSecondary, borderRadius: RADIUS.md, padding: SPACING.md, minHeight: 100, fontSize: 15, color: COLORS.onSurface, borderWidth: 1, borderColor: COLORS.border, textAlignVertical: 'top' },
   recipe: { flexDirection: 'row', gap: SPACING.md, alignItems: 'center', padding: SPACING.md, backgroundColor: COLORS.surfaceSecondary, borderRadius: RADIUS.lg, borderWidth: 1, borderColor: COLORS.border },

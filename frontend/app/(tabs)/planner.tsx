@@ -6,7 +6,7 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 
 import { useT } from '../../src/i18n/LanguageProvider';
 import { COLORS, SPACING, RADIUS } from '../../src/theme';
-import { reversePlan, Method } from '../../src/calculator';
+import { reversePlan, Method, PizzaStyle } from '../../src/calculator';
 import { scheduleLocal, isPushSupported } from '../../src/notifications';
 
 function fmt(d: Date) {
@@ -20,6 +20,7 @@ function pad(n: number) { return String(n).padStart(2, '0'); }
 export default function Planner() {
   const insets = useSafeAreaInsets();
   const { t } = useT();
+  const [style, setStyle] = useState<PizzaStyle>('neapolitan');
   const [method, setMethod] = useState<Method>('direct');
   const [bakeAt, setBakeAt] = useState<Date | null>(null);
   const [steps, setSteps] = useState<any[]>([]);
@@ -59,7 +60,7 @@ export default function Planner() {
 
   const generate = (d: Date) => {
     setBakeAt(d);
-    setSteps(reversePlan(d, method));
+    setSteps(reversePlan(d, method, style));
   };
 
   const scheduleAll = async () => {
@@ -118,6 +119,22 @@ export default function Planner() {
       <View style={styles.header}><Text style={styles.title}>{t.planner.title}</Text></View>
       <ScrollView contentContainerStyle={{ padding: SPACING.lg, paddingBottom: SPACING.xxxl, gap: SPACING.lg }}>
         <View style={styles.card}>
+          <Text style={styles.label}>{t.planner.style}</Text>
+          <View style={styles.chipRow}>
+            {(['neapolitan', 'romana', 'ny_style'] as PizzaStyle[]).map((key) => (
+              <Pressable
+                key={key}
+                testID={`planner-style-${key}`}
+                onPress={() => { setStyle(key); if (bakeAt) setSteps(reversePlan(bakeAt, method, key)); }}
+                style={[styles.chip, style === key && styles.chipActive]}
+              >
+                <Text style={[styles.chipText, style === key && { color: '#fff' }]}>{t.calc.pizzaStyles[key].name}</Text>
+              </Pressable>
+            ))}
+          </View>
+        </View>
+
+        <View style={styles.card}>
           <Text style={styles.label}>{t.planner.method}</Text>
           <View style={styles.chipRow}>
             {[
@@ -128,7 +145,7 @@ export default function Planner() {
               <Pressable
                 key={m.key}
                 testID={`planner-method-${m.key}`}
-                onPress={() => { setMethod(m.key); if (bakeAt) setSteps(reversePlan(bakeAt, m.key)); }}
+                onPress={() => { setMethod(m.key); if (bakeAt) setSteps(reversePlan(bakeAt, m.key, style)); }}
                 style={[styles.chip, method === m.key && styles.chipActive]}
               >
                 <Text style={[styles.chipText, method === m.key && { color: '#fff' }]}>{m.l}</Text>

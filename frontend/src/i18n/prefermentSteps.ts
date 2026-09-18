@@ -8,7 +8,7 @@ export type MethodSteps = { hand: Path; mixer: Path };
 
 // ============================ HR ============================
 const HR_BIGA_P1: Phase = {
-  title: 'Faza 1: Izrada Bige',
+  title: 'Faza A: Izrada Bige',
   steps: [
     'U posudu stavite brašno i po njemu ravnomjerno izmrvite kvasac.',
     'Ulijte izračunatu hladnu vodu.',
@@ -18,7 +18,7 @@ const HR_BIGA_P1: Phase = {
   ],
 };
 const HR_BIGA_HAND_P2: Phase = {
-  title: 'Faza 2: Završni zamjes (Ručno)',
+  title: 'Faza B: Završni zamjes (Ručno)',
   steps: [
     'Bigu izrežite nožem ili natrgajte rukama na manje komade direktno u posudu za ručni zamjes.',
     'Dodajte preostali kvasac i ulijte veći dio hladne vode.',
@@ -29,7 +29,7 @@ const HR_BIGA_HAND_P2: Phase = {
   ],
 };
 const HR_BIGA_MIXER_P2: Phase = {
-  title: 'Faza 2: Završni zamjes (Mikser)',
+  title: 'Faza B: Završni zamjes (Mikser)',
   steps: [
     'Bigu izrežite nožem na manje komade i ubacite u posudu miksera.',
     'Dodajte preostali kvasac i ulijte veći dio hladne vode (s ledom). Pokrenite mikser u 1. brzini.',
@@ -39,37 +39,40 @@ const HR_BIGA_MIXER_P2: Phase = {
   ],
 };
 const HR_BIGA_P3: Phase = {
-  title: 'Faza 3: Odmor, loptice i pečenje',
+  title: 'Faza C: Odmor, loptice i pečenje',
   steps: [
     'Ostavite tijesto da odmori u posudi 6–7 minuta.',
     'Prebacite ga u nauljenu posudu, pokrijte i ostavite 30 minuta na sobnoj temperaturi.',
-    'Preklopite tijesto par puta rukama (stretch & fold), pokrijte i stavite u hladnjak na 60 do 90 minuta.',
+    'Preklopite tijesto par puta rukama (stretch & fold), pokrijte i ostavite 30 minuta na sobnoj temperaturi.',
     'Oblikujte čvrste loptice (bulice) od 260–300 g.',
-    'Loptice ostavite 15 minuta na sobnoj temp., pa ih spremite u hladnjak na još 5 do 6 sati.',
-    'Izvadite loptice 10–15 minuta prije pečenja, razvucite na semoli, nadjenite i pecite na najjačoj temperaturi.',
+    'Ostavite loptice 30–60 minuta na sobnoj temperaturi, pa ih spremite u hladnjak na odabrano vrijeme.',
+    'Izvadite loptice 15–20 minuta prije razvlačenja ili kada se približno udvostruče, razvucite na semoli, nadjenite i pecite.',
   ],
 };
 
 const HR_POOLISH_P1: Phase = {
-  title: 'Faza 1: Izrada Poolisha',
+  title: 'Faza A: Izrada Poolisha',
   steps: [
     'U posudi otopite kvasac u izračunatoj vodi za Poolish.',
     'Dodajte brašno za Poolish i dobro pomiješajte pjenjačom ili vilicom dok ne dobijete glatku tekuću smjesu.',
-    'Pokrijte posudu, ostavite 1 sat na sobnoj temperaturi, pa prebacite u hladnjak na 16 do 24 sata.',
+    'Pokrijte posudu i ostavite Poolish da se odmori.',
+    'Ostavite Poolish 1 sat na sobnoj temperaturi.',
+    'Prebacite Poolish u hladnjak na 16 do 24 sata.',
   ],
 };
 const HR_POOLISH_HAND_P2: Phase = {
-  title: 'Faza 2: Završni zamjes (Ručno)',
+  title: 'Faza B: Dodavanje Poolisha i ručni zamjes',
   steps: [
     'Hladni Poolish prelijte u posudu za miješenje.',
-    'Dodajte preostalo brašno i veći dio preostale vode.',
-    'Miješajte kuhačom ili rukama dok se brašno u potpunosti ne sjedini s Poolishom.',
-    'Ubacite sol i polako u tankom mlazu dolijevajte ostatak vode miješajući tijesto.',
+    'Dodajte preostalo brašno i veći dio vode.',
+    'Rukama ili kuhačom povežite Poolish s brašnom dok ne dobijete grubu smjesu.',
+    'Polako dolijevajte ostatak vode i nastavite mijesiti dok se tijesto ne poveže.',
+    'Dodajte sol kao zaseban korak i nastavite mijesiti dok se potpuno ne upije.',
     'Ulijte maslinovo ulje i mijesite rukama dok ga tijesto ne upije i ne postane svilenkasto.',
   ],
 };
 const HR_POOLISH_MIXER_P2: Phase = {
-  title: 'Faza 2: Završni zamjes (Mikser)',
+  title: 'Faza B: Dodavanje Poolisha i zamjes mikserom',
   steps: [
     'Hladni Poolish prelijte izravno u posudu miksera.',
     'Dodajte preostalo brašno i veći dio vode te pokrenite mikser u 1. brzini.',
@@ -78,20 +81,20 @@ const HR_POOLISH_MIXER_P2: Phase = {
   ],
 };
 const HR_POOLISH_P3: Phase = {
-  title: 'Faza 3: Odmor, loptice i pečenje',
+  title: 'Faza C: Odmor i bulk fermentacija',
   steps: [
-    'Oblikujte tijesto u kuglu, stavite u nauljenu posudu i pokrijte.',
-    'Ostavite da odmori 30 minuta na sobnoj temperaturi.',
-    'Napravite jedno preklapanje rukama (stretch & fold), pa ostavite još 30 minuta na sobnoj temperaturi.',
+    'Ostavite tijesto da odmori u posudi 6–7 minuta.',
+    'Prebacite ga u nauljenu posudu, pokrijte i ostavite 30 minuta na sobnoj temperaturi.',
+    'Napravite jedno preklapanje rukama (stretch & fold), pokrijte i ostavite još 30 minuta.',
+    'Oblikujte tijesto u glatku kuglu i pripremite ga za podjelu.',
     'Podijelite tijesto i oblikujte glatke loptice od 260–280 g.',
-    'Poslažite loptice u kutiju za tijesto i ostavite na sobnoj temp. 3 do 4 sata prije pečenja.',
-    'Razvucite lopticu na semoli, nadjenite i pecite na najjačoj temperaturi peći.',
+    'Ostavite loptice da se opuste prije razvlačenja, zatim ih razvucite, nadjenite i pecite.',
   ],
 };
 
 // ============================ EN ============================
 const EN_BIGA_P1: Phase = {
-  title: 'Phase 1: Making the Biga',
+  title: 'Phase A: Making the Biga',
   steps: [
     'Place the flour in a bowl and evenly crumble the yeast over it.',
     'Pour in the calculated cold water.',
@@ -101,7 +104,7 @@ const EN_BIGA_P1: Phase = {
   ],
 };
 const EN_BIGA_HAND_P2: Phase = {
-  title: 'Phase 2: Final mix (Hand)',
+  title: 'Phase B: Final mix (Hand)',
   steps: [
     'Cut the Biga with a knife or tear it by hand into smaller pieces, directly into the mixing bowl.',
     'Add the remaining yeast and pour in most of the cold water.',
@@ -112,7 +115,7 @@ const EN_BIGA_HAND_P2: Phase = {
   ],
 };
 const EN_BIGA_MIXER_P2: Phase = {
-  title: 'Phase 2: Final mix (Mixer)',
+  title: 'Phase B: Final mix (Mixer)',
   steps: [
     'Cut the Biga with a knife into smaller pieces and place them into the mixer bowl.',
     'Add the remaining yeast and pour in most of the cold water (with ice). Start the mixer on speed 1.',
@@ -122,7 +125,7 @@ const EN_BIGA_MIXER_P2: Phase = {
   ],
 };
 const EN_BIGA_P3: Phase = {
-  title: 'Phase 3: Rest, balling and baking',
+  title: 'Phase C: Rest, balling and baking',
   steps: [
     'Let the dough rest in the bowl for 6–7 minutes.',
     'Transfer it to an oiled bowl, cover and leave for 30 minutes at room temperature.',
@@ -134,25 +137,28 @@ const EN_BIGA_P3: Phase = {
 };
 
 const EN_POOLISH_P1: Phase = {
-  title: 'Phase 1: Making the Poolish',
+  title: 'Phase A: Making the Poolish',
   steps: [
     'In a bowl, dissolve the yeast in the calculated water for Poolish.',
     'Add the flour for Poolish and mix well with a whisk or fork until you get a smooth, liquid mixture.',
-    'Cover the bowl, leave for 1 hour at room temperature, then move to the fridge for 16 to 24 hours.',
+    'Cover the bowl and let the Poolish rest.',
+    'Leave the Poolish for 1 hour at room temperature.',
+    'Move the Poolish to the fridge for 16 to 24 hours.',
   ],
 };
 const EN_POOLISH_HAND_P2: Phase = {
-  title: 'Phase 2: Final mix (Hand)',
+  title: 'Phase B: Adding the Poolish and hand mixing',
   steps: [
     'Pour the cold Poolish into the mixing bowl.',
-    'Add the remaining flour and most of the remaining water.',
-    'Mix with a spoon or your hands until the flour is fully combined with the Poolish.',
-    'Add the salt and slowly, in a thin stream, pour in the remaining water while mixing the dough.',
+    'Add the remaining flour and most of the water.',
+    'Combine the Poolish and flour with a spoon or your hands until you have a rough mixture.',
+    'Slowly add the remaining water and knead until the dough comes together.',
+    'Add the salt separately and continue kneading until it is fully absorbed.',
     'Pour in the olive oil and knead by hand until the dough absorbs it and becomes silky.',
   ],
 };
 const EN_POOLISH_MIXER_P2: Phase = {
-  title: 'Phase 2: Final mix (Mixer)',
+  title: 'Phase B: Adding the Poolish and mixer mixing',
   steps: [
     'Pour the cold Poolish directly into the mixer bowl.',
     'Add the remaining flour and most of the water, and start the mixer on speed 1.',
@@ -161,20 +167,20 @@ const EN_POOLISH_MIXER_P2: Phase = {
   ],
 };
 const EN_POOLISH_P3: Phase = {
-  title: 'Phase 3: Rest, balling and baking',
+  title: 'Phase C: Rest and bulk fermentation',
   steps: [
-    'Shape the dough into a ball, place in an oiled bowl and cover.',
-    'Let it rest for 30 minutes at room temperature.',
-    'Do one stretch & fold by hand, then leave it for another 30 minutes at room temperature.',
+    'Let the dough rest in the bowl for 6–7 minutes.',
+    'Transfer it to an oiled bowl, cover and leave for 30 minutes at room temperature.',
+    'Do one stretch & fold by hand, cover and leave for another 30 minutes.',
+    'Shape the dough into a smooth ball and prepare it for dividing.',
     'Divide the dough and shape smooth balls of 260–280 g.',
-    'Arrange the balls in a dough tray and leave them at room temp for 3 to 4 hours before baking.',
-    'Stretch the ball on semolina, top and bake at the highest oven temperature.',
+    'Let the balls relax before stretching, then stretch on semolina, top and bake.',
   ],
 };
 
 // ============================ DE ============================
 const DE_BIGA_P1: Phase = {
-  title: 'Phase 1: Herstellung der Biga',
+  title: 'Phase A: Herstellung der Biga',
   steps: [
     'Geben Sie das Mehl in eine Schüssel und zerbröseln Sie die Hefe gleichmäßig darüber.',
     'Gießen Sie das berechnete kalte Wasser hinein.',
@@ -184,7 +190,7 @@ const DE_BIGA_P1: Phase = {
   ],
 };
 const DE_BIGA_HAND_P2: Phase = {
-  title: 'Phase 2: Endkneten (Hand)',
+  title: 'Phase B: Endkneten (Hand)',
   steps: [
     'Schneiden Sie die Biga mit einem Messer oder reißen Sie sie mit den Händen in kleinere Stücke direkt in die Knetschüssel.',
     'Fügen Sie die restliche Hefe hinzu und gießen Sie den Großteil des kalten Wassers ein.',
@@ -195,7 +201,7 @@ const DE_BIGA_HAND_P2: Phase = {
   ],
 };
 const DE_BIGA_MIXER_P2: Phase = {
-  title: 'Phase 2: Endkneten (Küchenmaschine)',
+  title: 'Phase B: Endkneten (Küchenmaschine)',
   steps: [
     'Schneiden Sie die Biga mit einem Messer in kleinere Stücke und geben Sie sie in die Mixerschüssel.',
     'Fügen Sie die restliche Hefe hinzu und gießen Sie den Großteil des kalten Wassers ein (mit Eis). Starten Sie den Mixer auf Stufe 1.',
@@ -205,7 +211,7 @@ const DE_BIGA_MIXER_P2: Phase = {
   ],
 };
 const DE_BIGA_P3: Phase = {
-  title: 'Phase 3: Ruhen, Teiglinge und Backen',
+  title: 'Phase C: Ruhen, Teiglinge und Backen',
   steps: [
     'Lassen Sie den Teig 6–7 Minuten in der Schüssel ruhen.',
     'Geben Sie ihn in eine geölte Schüssel, decken Sie ab und lassen Sie ihn 30 Minuten bei Raumtemperatur ruhen.',
@@ -217,25 +223,28 @@ const DE_BIGA_P3: Phase = {
 };
 
 const DE_POOLISH_P1: Phase = {
-  title: 'Phase 1: Herstellung des Poolish',
+  title: 'Phase A: Herstellung des Poolish',
   steps: [
     'In einer Schüssel die Hefe im berechneten Wasser für Poolish auflösen.',
     'Das Mehl für Poolish hinzufügen und mit einem Schneebesen oder einer Gabel gut vermischen, bis eine glatte, flüssige Masse entsteht.',
-    'Die Schüssel abdecken, 1 Stunde bei Raumtemperatur ruhen lassen, dann für 16 bis 24 Stunden in den Kühlschrank stellen.',
+    'Die Schüssel abdecken und den Poolish ruhen lassen.',
+    'Den Poolish 1 Stunde bei Raumtemperatur stehen lassen.',
+    'Den Poolish für 16 bis 24 Stunden in den Kühlschrank stellen.',
   ],
 };
 const DE_POOLISH_HAND_P2: Phase = {
-  title: 'Phase 2: Endkneten (Hand)',
+  title: 'Phase B: Poolish hinzufügen und von Hand kneten',
   steps: [
     'Den kalten Poolish in die Knetschüssel gießen.',
-    'Das restliche Mehl und den Großteil des restlichen Wassers hinzufügen.',
-    'Mit einem Löffel oder den Händen mischen, bis das Mehl vollständig mit dem Poolish verbunden ist.',
-    'Das Salz hinzufügen und langsam in einem dünnen Strahl das restliche Wasser einlaufen lassen, während Sie den Teig kneten.',
+    'Das restliche Mehl und den Großteil des Wassers hinzufügen.',
+    'Poolish und Mehl mit einem Löffel oder den Händen zu einer groben Masse verbinden.',
+    'Das restliche Wasser langsam hinzufügen und kneten, bis der Teig zusammenkommt.',
+    'Das Salz separat hinzufügen und weiterkneten, bis es vollständig aufgenommen ist.',
     'Das Olivenöl einfüllen und mit den Händen kneten, bis der Teig es aufgenommen hat und seidig wird.',
   ],
 };
 const DE_POOLISH_MIXER_P2: Phase = {
-  title: 'Phase 2: Endkneten (Küchenmaschine)',
+  title: 'Phase B: Poolish hinzufügen und mit der Maschine kneten',
   steps: [
     'Den kalten Poolish direkt in die Mixerschüssel gießen.',
     'Das restliche Mehl und den Großteil des Wassers hinzufügen und den Mixer auf Stufe 1 starten.',
@@ -244,20 +253,20 @@ const DE_POOLISH_MIXER_P2: Phase = {
   ],
 };
 const DE_POOLISH_P3: Phase = {
-  title: 'Phase 3: Ruhen, Teiglinge und Backen',
+  title: 'Phase C: Ruhe und Stockgare',
   steps: [
-    'Den Teig zu einer Kugel formen, in eine geölte Schüssel legen und abdecken.',
-    '30 Minuten bei Raumtemperatur ruhen lassen.',
-    'Ein Stretch & Fold von Hand machen, dann weitere 30 Minuten bei Raumtemperatur ruhen lassen.',
+    'Den Teig 6–7 Minuten in der Schüssel ruhen lassen.',
+    'In eine geölte Schüssel geben, abdecken und 30 Minuten bei Raumtemperatur ruhen lassen.',
+    'Ein Stretch & Fold von Hand machen, abdecken und weitere 30 Minuten ruhen lassen.',
+    'Den Teig zu einer glatten Kugel formen und zum Teilen vorbereiten.',
     'Den Teig teilen und glatte Kugeln zu je 260–280 g formen.',
-    'Die Kugeln in eine Teigbox setzen und 3 bis 4 Stunden bei Raumtemp. vor dem Backen ruhen lassen.',
-    'Die Kugel auf Semola ausziehen, belegen und bei höchster Ofentemperatur backen.',
+    'Die Kugeln entspannen lassen, dann auf Semola ausziehen, belegen und backen.',
   ],
 };
 
 // ============================ SL ============================
 const SL_BIGA_P1: Phase = {
-  title: 'Faza 1: Priprava Bige',
+  title: 'Faza A: Priprava Bige',
   steps: [
     'V posodo stresite moko in po njej enakomerno zdrobite kvas.',
     'Vlijte izračunano hladno vodo.',
@@ -267,7 +276,7 @@ const SL_BIGA_P1: Phase = {
   ],
 };
 const SL_BIGA_HAND_P2: Phase = {
-  title: 'Faza 2: Končno gnetenje (Ročno)',
+  title: 'Faza B: Končno gnetenje (Ročno)',
   steps: [
     'Bigo z nožem razrežite ali z rokami raztrgajte na manjše kose neposredno v posodo za ročno gnetenje.',
     'Dodajte preostali kvas in vlijte večji del hladne vode.',
@@ -278,7 +287,7 @@ const SL_BIGA_HAND_P2: Phase = {
   ],
 };
 const SL_BIGA_MIXER_P2: Phase = {
-  title: 'Faza 2: Končno gnetenje (Mešalnik)',
+  title: 'Faza B: Končno gnetenje (Mešalnik)',
   steps: [
     'Bigo z nožem razrežite na manjše kose in jih dajte v posodo mešalnika.',
     'Dodajte preostali kvas in vlijte večji del hladne vode (z ledom). Zaženite mešalnik pri 1. hitrosti.',
@@ -288,7 +297,7 @@ const SL_BIGA_MIXER_P2: Phase = {
   ],
 };
 const SL_BIGA_P3: Phase = {
-  title: 'Faza 3: Počitek, kepice in peka',
+  title: 'Faza C: Počitek, kepice in peka',
   steps: [
     'Pustite testo počivati v posodi 6–7 minut.',
     'Prestavite ga v naoljeno posodo, pokrijte in pustite 30 minut pri sobni temperaturi.',
@@ -300,25 +309,28 @@ const SL_BIGA_P3: Phase = {
 };
 
 const SL_POOLISH_P1: Phase = {
-  title: 'Faza 1: Priprava Poolisha',
+  title: 'Faza A: Priprava Poolisha',
   steps: [
     'V posodi raztopite kvas v izračunani vodi za Poolish.',
     'Dodajte moko za Poolish in dobro premešajte z metlico ali vilicami, da dobite gladko tekočo zmes.',
-    'Pokrijte posodo, pustite 1 uro pri sobni temperaturi, nato pa jo prestavite v hladilnik za 16 do 24 ur.',
+    'Pokrijte posodo in pustite Poolish počivati.',
+    'Poolish pustite 1 uro pri sobni temperaturi.',
+    'Poolish prestavite v hladilnik za 16 do 24 ur.',
   ],
 };
 const SL_POOLISH_HAND_P2: Phase = {
-  title: 'Faza 2: Končno gnetenje (Ročno)',
+  title: 'Faza B: Dodajanje Poolisha in ročno gnetenje',
   steps: [
     'Hladni Poolish prelijte v posodo za gnetenje.',
-    'Dodajte preostalo moko in večji del preostale vode.',
-    'Mešajte z zajemalko ali rokami, dokler se moka popolnoma ne spoji s Poolishem.',
-    'Dodajte sol in počasi v tankem curku dolivajte preostalo vodo, medtem ko gnetete testo.',
+    'Dodajte preostalo moko in večji del vode.',
+    'Poolish in moko z zajemalko ali rokami povežite v grobo zmes.',
+    'Počasi dodajajte preostalo vodo in gnetite, dokler se testo ne poveže.',
+    'Sol dodajte ločeno in nadaljujte z gnetenjem, dokler se popolnoma ne vpije.',
     'Vlijte oljčno olje in z rokami gnetite, dokler ga testo ne vpije in ne postane svilnato.',
   ],
 };
 const SL_POOLISH_MIXER_P2: Phase = {
-  title: 'Faza 2: Končno gnetenje (Mešalnik)',
+  title: 'Faza B: Dodajanje Poolisha in gnetenje z mešalnikom',
   steps: [
     'Hladni Poolish prelijte neposredno v posodo mešalnika.',
     'Dodajte preostalo moko in večji del vode ter zaženite mešalnik pri 1. hitrosti.',
@@ -327,14 +339,14 @@ const SL_POOLISH_MIXER_P2: Phase = {
   ],
 };
 const SL_POOLISH_P3: Phase = {
-  title: 'Faza 3: Počitek, kepice in peka',
+  title: 'Faza C: Počitek in prva fermentacija',
   steps: [
-    'Testo oblikujte v kroglo, dajte v naoljeno posodo in pokrijte.',
-    'Pustite počivati 30 minut pri sobni temperaturi.',
-    'Naredite en stretch & fold z rokami, nato pustite še 30 minut pri sobni temperaturi.',
+    'Testo pustite počivati v posodi 6–7 minut.',
+    'Prestavite ga v naoljeno posodo, pokrijte in pustite 30 minut pri sobni temperaturi.',
+    'Naredite en stretch & fold z rokami, pokrijte in pustite še 30 minut.',
+    'Testo oblikujte v gladko kepo in ga pripravite za delitev.',
     'Testo razdelite in oblikujte gladke kepice po 260–280 g.',
-    'Kepice zložite v posodo za testo in pustite pri sobni temp. 3 do 4 ure pred peko.',
-    'Kepico raztegnite na zdrobu, obložite in pecite pri najvišji temperaturi pečice.',
+    'Kepice pustite počivati, nato jih raztegnite na zdrobu, obložite in specite.',
   ],
 };
 

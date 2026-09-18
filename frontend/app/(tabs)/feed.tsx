@@ -230,7 +230,7 @@ const styles = StyleSheet.create({
   ratingRow: { flexDirection: 'row', gap: 4, alignItems: 'center', marginTop: 6 },
   ratingText: { color: COLORS.muted, fontSize: 12, marginLeft: 4 },
   featured: { borderRadius: RADIUS.lg, overflow: 'hidden', backgroundColor: COLORS.surfaceInverse, aspectRatio: 16 / 10, marginBottom: SPACING.sm, position: 'relative' },
-  featuredImage: { ...StyleSheet.absoluteFillObject as any, width: '100%', height: '100%' },
+  featuredImage: { ...StyleSheet.absoluteFill, width: '100%', height: '100%' },
   featuredScrim: { position: 'absolute', left: 0, right: 0, bottom: 0, height: '65%' },
   featuredBadge: { position: 'absolute', top: SPACING.md, left: SPACING.md, backgroundColor: COLORS.brand, paddingHorizontal: SPACING.md, paddingVertical: 6, borderRadius: RADIUS.pill, flexDirection: 'row', gap: 4, alignItems: 'center' },
   featuredBadgeText: { color: '#fff', fontSize: 11, fontWeight: '800', letterSpacing: 0.5, textTransform: 'uppercase' },

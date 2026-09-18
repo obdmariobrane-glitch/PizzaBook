@@ -17,13 +17,65 @@ import { scheduleLocal, cancelLocal, isPushSupported } from '../../src/notificat
 import { COLORS, SPACING, RADIUS } from '../../src/theme';
 import {
   dimensionsCalc, doughCalc, iceCalc,
-  Method, OvenType, FlourType, FLOUR_PROFILES, BASE_FLOURS, blendIdealHydration,
+  Method, OvenType, FlourType, PizzaStyle, PIZZA_STYLE_PROFILES, FLOUR_PROFILES, BASE_FLOURS, blendIdealHydration,
 } from '../../src/calculator';
 import { useAuth } from '../../src/auth';
+import { getStyleSteps, getStyleBakingSteps, getStyleBakingTemp } from '../../src/i18n/styleSteps';
 
-const DIAMETERS = [26, 28, 30, 33, 35, 40];
+const DIAMETERS = [28, 30, 33, 35];
+const CALCULATOR_SETTINGS_KEY = 'calculatorSettings';
+
+type CalculatorSettings = {
+  pizzaStyle: PizzaStyle;
+  flour: FlourType;
+  blendA: Exclude<FlourType, 'custom'>;
+  blendB: Exclude<FlourType, 'custom'>;
+  blendPctA: number;
+  pizzas: number;
+  diameter: number;
+  customBallWeight: number | null;
+  method: Method;
+  bigaPct: number;
+  poolishPct: number;
+  bigaHours: number;
+  poolishHours: number;
+  hydration: number;
+  saltPct: number;
+  oilPct: number;
+  roomTemp: number;
+  roomHours: number;
+  fridgeTemp: number;
+  fridgeHours: number;
+  oven: OvenType;
+  ovenTemp: number;
+  mixing: 'hand' | 'mixer';
+};
 
 type FlourEntry = { key: FlourType; label: string; suffix: string; info?: string };
+
+type BakingPoint = { temperature: number; min: number; max: number };
+
+function bakingTimeForTemperature(temperature: number, points: BakingPoint[]) {
+  const value = Math.max(points[0].temperature, Math.min(points[points.length - 1].temperature, temperature));
+  const upperIndex = points.findIndex((point) => point.temperature >= value);
+  if (upperIndex <= 0) return points[0];
+  const lower = points[upperIndex - 1];
+  const upper = points[upperIndex];
+  const ratio = (value - lower.temperature) / (upper.temperature - lower.temperature);
+  return {
+    temperature,
+    min: lower.min + (upper.min - lower.min) * ratio,
+    max: lower.max + (upper.max - lower.max) * ratio,
+  };
+}
+
+function formatBakingMinutes(minutes: number, lang: Lang) {
+  const rounded = Math.round(minutes * 4) / 4;
+  const secondsUnit = lang === 'de' ? 'Sek.' : 's';
+  const minutesUnit = lang === 'de' ? 'Min.' : 'min';
+  if (rounded < 2) return `${Math.round(rounded * 60)} ${secondsUnit}`;
+  return `${Number.isInteger(rounded) ? rounded : rounded.toString().replace('.', ',')} ${minutesUnit}`;
+}
 
 const FLOURS_HR: FlourEntry[] = [
   { key: 'caputo00',   label: 'Tipo 0 / 00',           suffix: 'Idealno 68%', info: 'Klasično meko brašno za neapolitansku pizzu.\n\nPrimjeri: Caputo Pizzeria, Caputo Classica, Molino Dallagiovanna Rinforzato.\n\nW faktor ~ 260–300. Idealna hidracija 65–70%.' },
@@ -61,12 +113,81 @@ const FLOURS_BY_LANG: Record<'hr' | 'en' | 'de' | 'sl', FlourEntry[]> = {
   hr: FLOURS_HR, en: FLOURS_EN, de: FLOURS_DE, sl: FLOURS_SL,
 };
 
+const FLOUR_IMAGES: Record<FlourType, any> = {
+  caputo00: require('../../assets/images/flour-tipo00.png'),
+  manitoba: require('../../assets/images/flour-manitoba.png'),
+  spelt: require('../../assets/images/flour-spelt.png'),
+  wholeWheat: require('../../assets/images/flour-wholewheat.png'),
+  glutenFree: require('../../assets/images/flour-glutenfree.png'),
+  custom: require('../../assets/images/flour-custom.png'),
+};
+
+const METHOD_INFO: Record<Lang, Record<Method, { title: string; body: string }>> = {
+  hr: {
+    direct: {
+      title: 'Direktna metoda (Direct Dough)',
+      body: 'Svi sastojci (brašno, voda, kvasac, sol i ulje) zamijese se odjednom u jednom koraku. Najjednostavnija je za početnike i ne zahtijeva pripremu predfermenta dan ranije. Može se raditi brzo na sobnoj temperaturi ili uz sporu fermentaciju u hladnjaku 24–48 sati za bolji okus i probavljivost.',
+    },
+    biga: {
+      title: 'Biga',
+      body: 'Biga je tvrdi talijanski predferment s približno 44–50% vode u odnosu na brašno. Dio brašna, vode i kvasca grubo se sjedini dan ranije, a zatim se nakon fermentacije dodaje ostatku sastojaka. Daje bogat okus, lagano i probavljivo tijesto, hrskavost i velike mjehuriće zraka.',
+    },
+    poolish: {
+      title: 'Poolish',
+      body: 'Poolish je tekući predferment s jednakom količinom brašna i vode (100% hidratacija) uz dodatak kvasca. Nakon fermentacije dodaje se ostatak brašna, vode i soli. Daje mekano i elastično tijesto koje se lako razvlači, lijepu zlatnu boju i nježan, blago orašast okus.',
+    },
+  },
+  en: {
+    direct: {
+      title: 'Direct Dough',
+      body: 'All ingredients (flour, water, yeast, salt, and oil) are mixed together in one step. It is the simplest method and does not require preparing a preferment the day before. It can be made quickly at room temperature or fermented slowly in the refrigerator for 24–48 hours for better flavor and digestibility.',
+    },
+    biga: {
+      title: 'Biga',
+      body: 'Biga is a firm Italian preferment made with roughly 44–50% water relative to the flour. Part of the flour, water, and yeast is mixed roughly the day before, then combined with the remaining ingredients after fermentation. It creates rich flavor, a light and digestible dough, crispness, and large air bubbles.',
+    },
+    poolish: {
+      title: 'Poolish',
+      body: 'Poolish is a liquid preferment made with equal parts flour and water (100% hydration) plus yeast. After fermentation, the remaining flour, water, and salt are added. It creates soft, elastic dough that stretches easily, develops a beautiful golden color, and has a gentle, lightly nutty flavor.',
+    },
+  },
+  de: {
+    direct: {
+      title: 'Direkte Methode (Direct Dough)',
+      body: 'Alle Zutaten (Mehl, Wasser, Hefe, Salz und Öl) werden in einem Schritt miteinander vermischt. Diese Methode ist am einfachsten und benötigt keinen Vorteig am Vortag. Sie kann schnell bei Raumtemperatur oder langsam 24–48 Stunden im Kühlschrank fermentiert werden.',
+    },
+    biga: {
+      title: 'Biga',
+      body: 'Biga ist ein fester italienischer Vorteig mit etwa 44–50% Wasser bezogen auf die Mehlmenge. Ein Teil von Mehl, Wasser und Hefe wird am Vortag grob vermischt und später mit den übrigen Zutaten verknetet. Sie sorgt für kräftiges Aroma, einen leichten Teig und große Luftblasen.',
+    },
+    poolish: {
+      title: 'Poolish',
+      body: 'Poolish ist ein flüssiger Vorteig aus gleichen Teilen Mehl und Wasser (100% Hydration) mit Hefe. Nach der Fermentation werden das restliche Mehl, Wasser und Salz hinzugefügt. Das Ergebnis ist ein weicher, elastischer Teig mit schöner goldener Farbe und leicht nussigem Geschmack.',
+    },
+  },
+  sl: {
+    direct: {
+      title: 'Neposredna metoda (Direct Dough)',
+      body: 'Vse sestavine (moka, voda, kvas, sol in olje) zmešamo naenkrat v enem koraku. To je najpreprostejša metoda in ne zahteva priprave predtesta dan prej. Testo lahko pripravimo hitro pri sobni temperaturi ali ga 24–48 ur počasi fermentiramo v hladilniku.',
+    },
+    biga: {
+      title: 'Biga',
+      body: 'Biga je čvrsto italijansko predtesto s približno 44–50% vode glede na količino moke. Del moke, vode in kvasa dan prej grobo zmešamo, nato pa po fermentaciji dodamo preostale sestavine. Daje bogat okus, lahko in prebavljivo testo ter velike zračne mehurčke.',
+    },
+    poolish: {
+      title: 'Poolish',
+      body: 'Poolish je tekoče predtesto iz enakih količin moke in vode (100% hidracija) z dodatkom kvasa. Po fermentaciji dodamo preostalo moko, vodo in sol. Testo je mehko, elastično in ga je lahko raztegniti, pri peki pa dobi lepo zlato barvo in rahlo oreškast okus.',
+    },
+  },
+};
+
 export default function CalculatorHome() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { t, lang } = useT();
   const { user } = useAuth();
 
+  const [pizzaStyle, setPizzaStyle] = useState<PizzaStyle>('neapolitan');
   const [flour, setFlour] = useState<FlourType>('caputo00');
   const [blendA, setBlendA] = useState<Exclude<FlourType, 'custom'>>('caputo00');
   const [blendB, setBlendB] = useState<Exclude<FlourType, 'custom'>>('wholeWheat');
@@ -77,22 +198,82 @@ export default function CalculatorHome() {
   const [customBallWeight, setCustomBallWeight] = useState<number | null>(null);
   const [customBallInput, setCustomBallInput] = useState<string>('');
   const [method, setMethod] = useState<Method>('direct');
-  const [hydration, setHydration] = useState(FLOUR_PROFILES.caputo00.ideal);
+  const [bigaPct, setBigaPct] = useState(50);
+  const [poolishPct, setPoolishPct] = useState(35);
+  const [bigaHours, setBigaHours] = useState(24);
+  const [poolishHours, setPoolishHours] = useState(24);
+  const [methodExpanded, setMethodExpanded] = useState(false);
+  const [hydration, setHydration] = useState(PIZZA_STYLE_PROFILES.neapolitan.hydration);
+  const [saltPct, setSaltPct] = useState(PIZZA_STYLE_PROFILES.neapolitan.saltPct);
+  const [oilPct, setOilPct] = useState(PIZZA_STYLE_PROFILES.neapolitan.oilPct);
   const [roomTemp, setRoomTemp] = useState(22);
   const [roomHours, setRoomHours] = useState(2);
   const [fridgeTemp, setFridgeTemp] = useState(4);
   const [fridgeHours, setFridgeHours] = useState(24);
   const [oven, setOven] = useState<OvenType>('homeStone');
+  const [ovenTemp, setOvenTemp] = useState(300);
+  const [ovenTempInput, setOvenTempInput] = useState('300');
   const [mixing, setMixing] = useState<'hand' | 'mixer'>('hand');
   const [showMixSteps, setShowMixSteps] = useState(false);
   const [moreTool, setMoreTool] = useState<null | 'school' | 'leftover' | 'shopping'>(null);
   const [completedSteps, setCompletedSteps] = useState<Record<string, boolean>>({});
   const [flourInfo, setFlourInfo] = useState<null | { label: string; info: string }>(null);
+  const [styleInfo, setStyleInfo] = useState<PizzaStyle | null>(null);
+  const [methodInfo, setMethodInfo] = useState<Method | null>(null);
+  const [styleExpanded, setStyleExpanded] = useState(false);
   const [flourExpanded, setFlourExpanded] = useState(false);
   const [activeTimers, setActiveTimers] = useState<Record<string, { endsAt: number; label: string; notifId?: string | null }>>({});
+  const [settingsLoaded, setSettingsLoaded] = useState(false);
   const alertedRef = useRef<Set<string>>(new Set());
   // ticker: force re-render each second for countdowns AND check for expired timers
-  const [, setTick] = useState(0);
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    AsyncStorage.getItem(CALCULATOR_SETTINGS_KEY).then((value) => {
+      if (value) {
+        try {
+          const saved = JSON.parse(value) as Partial<CalculatorSettings>;
+          if (saved.pizzaStyle) setPizzaStyle(saved.pizzaStyle);
+          if (saved.flour) setFlour(saved.flour);
+          if (saved.blendA) setBlendA(saved.blendA);
+          if (saved.blendB) setBlendB(saved.blendB);
+          if (typeof saved.blendPctA === 'number') setBlendPctA(saved.blendPctA);
+          if (typeof saved.pizzas === 'number') setPizzas(saved.pizzas);
+          if (typeof saved.diameter === 'number') setDiameter(saved.diameter);
+          if (saved.customBallWeight !== undefined) setCustomBallWeight(saved.customBallWeight);
+          if (saved.method) setMethod(saved.method);
+          if (typeof saved.bigaPct === 'number') setBigaPct(saved.bigaPct);
+          if (typeof saved.poolishPct === 'number') setPoolishPct(saved.poolishPct);
+          if (typeof saved.bigaHours === 'number') setBigaHours(saved.bigaHours);
+          if (typeof saved.poolishHours === 'number') setPoolishHours(saved.poolishHours);
+          if (typeof saved.hydration === 'number') setHydration(saved.hydration);
+          if (typeof saved.saltPct === 'number') setSaltPct(saved.saltPct);
+          if (typeof saved.oilPct === 'number') setOilPct(saved.oilPct);
+          if (typeof saved.roomTemp === 'number') setRoomTemp(saved.roomTemp);
+          if (typeof saved.roomHours === 'number') setRoomHours(saved.roomHours);
+          if (typeof saved.fridgeTemp === 'number') setFridgeTemp(saved.fridgeTemp);
+          if (typeof saved.fridgeHours === 'number') setFridgeHours(saved.fridgeHours);
+          if (saved.oven) setOven(saved.oven);
+          if (typeof saved.ovenTemp === 'number') {
+            setOvenTemp(saved.ovenTemp);
+            setOvenTempInput(String(saved.ovenTemp));
+          }
+          if (saved.mixing) setMixing(saved.mixing);
+        } catch {}
+      }
+      setSettingsLoaded(true);
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!settingsLoaded) return;
+    const settings: CalculatorSettings = {
+      pizzaStyle, flour, blendA, blendB, blendPctA, pizzas, diameter,
+      customBallWeight, method, bigaPct, poolishPct, bigaHours, poolishHours, hydration, saltPct, oilPct,
+      roomTemp, roomHours, fridgeTemp, fridgeHours, oven, ovenTemp, mixing,
+    };
+    AsyncStorage.setItem(CALCULATOR_SETTINGS_KEY, JSON.stringify(settings)).catch(() => {});
+  }, [settingsLoaded, pizzaStyle, flour, blendA, blendB, blendPctA, pizzas, diameter, customBallWeight, method, bigaPct, poolishPct, bigaHours, poolishHours, hydration, saltPct, oilPct, roomTemp, roomHours, fridgeTemp, fridgeHours, oven, ovenTemp, mixing]);
+
   useEffect(() => {
     const active = Object.entries(activeTimers);
     if (active.length === 0) return;
@@ -115,7 +296,7 @@ export default function CalculatorHome() {
         const firstLabel = activeTimers[expired[0]]?.label ?? '';
         Alert.alert(NOTIF.expiredAlertTitle, NOTIF.expiredAlertBody(firstLabel));
       } else {
-        setTick((n) => n + 1);
+        setNow(now);
       }
     }, 1000);
     return () => clearInterval(iv);
@@ -140,11 +321,11 @@ export default function CalculatorHome() {
   };
 
   const resetStepsForCurrent = () => {
-    const prefix = `${method}-${mixing}-`;
+    const prefixes = [`${method}-${mixing}-`, `style-${pizzaStyle}-${method}-${mixing}-`];
     setCompletedSteps((prev) => {
       const next: Record<string, boolean> = {};
       for (const k of Object.keys(prev)) {
-        if (!k.startsWith(prefix)) next[k] = prev[k];
+        if (!prefixes.some((prefix) => k.startsWith(prefix))) next[k] = prev[k];
       }
       AsyncStorage.setItem('completedSteps', JSON.stringify(next)).catch(() => {});
       return next;
@@ -203,14 +384,18 @@ export default function CalculatorHome() {
     try { Haptics.selectionAsync(); } catch {}
   };
 
-  const SALT_PCT = 2.8;
-  const OIL_PCT = 2;
-
   const flourProfile = FLOUR_PROFILES[flour];
+  const styleProfile = PIZZA_STYLE_PROFILES[pizzaStyle];
+  const isIdealSalt = saltPct === styleProfile.saltPct;
+  const isIdealOil = oilPct === styleProfile.oilPct;
+  const styleImages: Record<PizzaStyle, any> = {
+    neapolitan: require('../../assets/images/pizza-neapolitan.png'),
+    romana: require('../../assets/images/pizza-romana.png'),
+    ny_style: require('../../assets/images/pizza-new-york.png'),
+  };
   const isCustom = flour === 'custom';
   const customIdeal = useMemo(() => blendIdealHydration(blendA, blendB, blendPctA), [blendA, blendB, blendPctA]);
-  const effectiveIdeal = isCustom ? customIdeal : flourProfile.ideal;
-  const isIdealHydration = hydration === effectiveIdeal;
+  const isIdealHydration = hydration === flourProfile.ideal;
   const inRange = isCustom
     ? Math.abs(hydration - customIdeal) <= 3
     : (hydration >= flourProfile.min && hydration <= flourProfile.max);
@@ -226,6 +411,47 @@ export default function CalculatorHome() {
     try { Haptics.selectionAsync(); } catch {}
   };
 
+  const changeStyle = (nextStyle: PizzaStyle) => {
+    const next = PIZZA_STYLE_PROFILES[nextStyle];
+    setPizzaStyle(nextStyle);
+    setHydration(next.hydration);
+    setSaltPct(next.saltPct);
+    setOilPct(next.oilPct);
+    setOven(nextStyle === 'neapolitan' ? 'ooni' : 'homeStone');
+    setCustomBallWeight(null);
+    setCustomBallInput('');
+    setStyleExpanded(false);
+    try { Haptics.selectionAsync(); } catch {}
+  };
+
+  const selectOven = (nextOven: OvenType, temperature: number) => {
+    setOven(nextOven);
+    setOvenTemp(temperature);
+    setOvenTempInput(String(temperature));
+  };
+
+  const commitOvenTemperature = () => {
+    const parsed = Number(ovenTempInput.replace(',', '.'));
+    if (Number.isFinite(parsed) && parsed >= 200 && parsed <= 500) {
+      const temperature = Math.round(parsed);
+      setOvenTemp(temperature);
+      setOvenTempInput(String(temperature));
+    } else {
+      setOvenTempInput(String(ovenTemp));
+    }
+  };
+
+  const resetStyleDefaults = () => {
+    const profile = PIZZA_STYLE_PROFILES[pizzaStyle];
+    setHydration(profile.hydration);
+    setSaltPct(profile.saltPct);
+    setOilPct(profile.oilPct);
+    setDiameter(profile.defaultDiameter);
+    setCustomBallWeight(null);
+    setCustomBallInput('');
+    try { Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); } catch {}
+  };
+
   const changeBlend = (which: 'a' | 'b' | 'pct', value: any) => {
     let a = blendA, b = blendB, p = blendPctA;
     if (which === 'a') { a = value; setBlendA(value); }
@@ -237,14 +463,43 @@ export default function CalculatorHome() {
 
   // Reactive calculations - RE-COMPUTE on any input change
   const dims = useMemo(() => dimensionsCalc(diameter, pizzas), [diameter, pizzas]);
-  const effectiveBall = customBallWeight ?? dims.doughBall;
+  const effectiveBall = customBallWeight ?? (diameter === styleProfile.defaultDiameter ? styleProfile.ballWeight : dims.doughBall);
   const dough = useMemo(() => doughCalc({
     pizzas, ballWeight: effectiveBall, hydration,
-    saltPct: SALT_PCT, oilPct: OIL_PCT, method,
+    saltPct, oilPct, method, bigaPct, poolishPct,
     roomHours, roomTemp, fridgeHours, fridgeTemp,
+    prefermentHours: method === 'biga' ? bigaHours : method === 'poolish' ? poolishHours : 0,
+    prefermentRoomHours: method === 'direct' ? 0 : (method === 'biga' ? Math.min(8, bigaHours) : Math.min(1, poolishHours)),
+    prefermentFridgeHours: method === 'direct' ? 0 : (method === 'biga' ? Math.max(0, bigaHours - Math.min(8, bigaHours)) : Math.max(0, poolishHours - Math.min(1, poolishHours))),
     mixing: mixing === 'mixer' ? 'spiral' : 'hand',
     yeastType: 'fresh',
-  }), [pizzas, effectiveBall, hydration, method, roomHours, roomTemp, fridgeHours, fridgeTemp, mixing]);
+  }), [pizzas, effectiveBall, hydration, saltPct, oilPct, method, bigaPct, poolishPct, bigaHours, poolishHours, roomHours, roomTemp, fridgeHours, fridgeTemp, mixing]);
+  const selectedPrefermentHours = method === 'biga' ? bigaHours : poolishHours;
+  const prefermentRoomHours = method === 'biga' ? Math.min(8, selectedPrefermentHours) : Math.min(1, selectedPrefermentHours);
+  const prefermentFridgeHours = Math.max(0, selectedPrefermentHours - prefermentRoomHours);
+  const idealFermentationText = method === 'biga'
+    ? ({
+      hr: `Idealno za Bigu: 8 sati RT na 18–20 °C + 16 sati hladnjak na 4–6 °C. Ukupno: 24 sata.`,
+      en: `Ideal for Biga: 8 hours at 18–20 °C + 16 hours refrigerated at 4–6 °C. Total: 24 hours.`,
+      de: `Ideal für Biga: 8 Stunden bei 18–20 °C + 16 Stunden im Kühlschrank bei 4–6 °C. Gesamt: 24 Stunden.`,
+      sl: `Idealno za Bigo: 8 ur pri 18–20 °C + 16 ur v hladilniku pri 4–6 °C. Skupaj: 24 ur.`,
+    }[lang])
+    : ({
+      hr: `Idealno za Poolish: 1 sat RT + 16–24 sata hladnjak.`,
+      en: `Ideal for Poolish: 1 hour at room temperature + 16–24 hours refrigerated.`,
+      de: `Ideal für Poolish: 1 Stunde bei Raumtemperatur + 16–24 Stunden im Kühlschrank.`,
+      sl: `Idealno za Poolish: 1 ura pri sobni temperaturi + 16–24 ur v hladilniku.`,
+    }[lang]);
+  const idealPreferment = method === 'biga'
+    ? selectedPrefermentHours === 24
+    : selectedPrefermentHours >= 16 && selectedPrefermentHours <= 24;
+  const fermentationInfoTitle = ({ hr: 'Fermentacija i kvasac', en: 'Fermentation and yeast', de: 'Fermentation und Hefe', sl: 'Fermentacija in kvas' }[lang]);
+  const fermentationInfoBody = ({
+    hr: `Predferment: ${selectedPrefermentHours} h\nZavršno RT: ${roomHours} h\nZavršni hladnjak: ${fridgeHours} h\nUkupno: ${selectedPrefermentHours + roomHours + fridgeHours} h\n\n${idealFermentationText}\n\nIzračunati svježi kvasac: ${dough.yeastPct}%`,
+    en: `Preferment: ${selectedPrefermentHours} h\nFinal room temperature: ${roomHours} h\nFinal refrigerator: ${fridgeHours} h\nTotal: ${selectedPrefermentHours + roomHours + fridgeHours} h\n\n${idealFermentationText}\n\nCalculated fresh yeast: ${dough.yeastPct}%`,
+    de: `Vorteig: ${selectedPrefermentHours} Std.\nEndgare Raumtemperatur: ${roomHours} Std.\nEndgare Kühlschrank: ${fridgeHours} Std.\nGesamt: ${selectedPrefermentHours + roomHours + fridgeHours} Std.\n\n${idealFermentationText}\n\nBerechnete Frischhefe: ${dough.yeastPct}%`,
+    sl: `Predtesto: ${selectedPrefermentHours} h\nKončna sobna temperatura: ${roomHours} h\nKončni hladilnik: ${fridgeHours} h\nSkupaj: ${selectedPrefermentHours + roomHours + fridgeHours} h\n\n${idealFermentationText}\n\nIzračunani sveži kvas: ${dough.yeastPct}%`,
+  }[lang]);
   const iceNeeded = roomTemp >= 26;
   const ice = useMemo(() => iceNeeded ? iceCalc(dough.total.water, roomTemp, 4) : null, [iceNeeded, dough.total.water, roomTemp]);
 
@@ -261,6 +516,8 @@ export default function CalculatorHome() {
   const saveRecipe = async () => {
     const recipe = {
       pizzas, diameter, hydration, method, flourType: flourProfile.label,
+      style_id: pizzaStyle,
+      style_params: { ballWeight: effectiveBall, hydration, saltPct, oilPct, diameter, bigaPct, poolishPct },
       ballWeight: effectiveBall,
       flour: dough.total.flour, water: dough.total.water,
       salt: dough.total.salt, oil: dough.total.oil, yeast: dough.total.yeast,
@@ -285,10 +542,135 @@ export default function CalculatorHome() {
   const bakingSteps =
     oven === 'homeStone' ? t.calc.homeStoneSteps :
     oven === 'ooni' ? t.calc.ooniSteps : t.calc.homePanSteps;
+  const styleBakingSteps = getStyleBakingSteps(pizzaStyle, oven, lang);
+  const styleBakingTemp = getStyleBakingTemp(pizzaStyle, oven, lang);
+  const stylePreparationSteps = getStyleSteps(pizzaStyle, method, mixing, roomHours, fridgeHours, lang);
+  const bakingPoints = oven === 'homePan'
+    ? [{ temperature: 200, min: 15, max: 20 }, { temperature: 220, min: 13, max: 17 }, { temperature: 230, min: 12, max: 15 }, { temperature: 250, min: 10, max: 14 }, { temperature: 270, min: 8, max: 12 }, { temperature: 280, min: 7, max: 11 }, { temperature: 300, min: 6, max: 9 }]
+    : oven === 'ooni'
+      ? [{ temperature: 350, min: 3, max: 4 }, { temperature: 400, min: 2, max: 3 }, { temperature: 450, min: 1, max: 1.5 }, { temperature: 480, min: 0.75, max: 1.25 }]
+      : [{ temperature: 200, min: 9, max: 13 }, { temperature: 220, min: 8, max: 11 }, { temperature: 230, min: 7, max: 10 }, { temperature: 250, min: 5, max: 8 }, { temperature: 270, min: 4, max: 6 }, { temperature: 280, min: 3.5, max: 5 }, { temperature: 300, min: 3, max: 4.5 }];
+  const calculatedBakingTime = bakingTimeForTemperature(ovenTemp, bakingPoints);
+  const bakingDuration = `${ovenTemp} °C · ${formatBakingMinutes(calculatedBakingTime.min, lang)}–${formatBakingMinutes(calculatedBakingTime.max, lang)}`;
+  const ovenTempLabel = { hr: 'Temperatura pećnice', en: 'Oven temperature', de: 'Ofentemperatur', sl: 'Temperatura pečice' }[lang];
+  const detailedDirectSteps = method === 'direct' && lang === 'hr'
+    ? getDetailedDirectSteps(mixing, dough.total, dough.totalDough, pizzas, effectiveBall, diameter, fridgeHours, oven, ovenTemp, roomTemp, dims.cheese, undefined, undefined, flour)
+    : method === 'biga' && lang === 'hr'
+      ? getDetailedDirectSteps(mixing, dough.total, dough.totalDough, pizzas, effectiveBall, diameter, fridgeHours, oven, ovenTemp, roomTemp, dims.cheese, {
+        flour: dough.preferment?.flour ?? 0,
+        water: dough.preferment?.water ?? 0,
+        yeast: dough.preferment?.yeast ?? 0,
+        remainingFlour: dough.main.flour,
+        remainingWater: dough.main.water,
+        pct: bigaPct,
+      }, flour)
+    : method === 'poolish' && lang === 'hr'
+      ? getDetailedDirectSteps(mixing, dough.total, dough.totalDough, pizzas, effectiveBall, diameter, fridgeHours, oven, ovenTemp, roomTemp, dims.cheese, undefined, {
+        flour: dough.preferment?.flour ?? 0,
+        water: dough.preferment?.water ?? 0,
+        yeast: dough.preferment?.yeast ?? 0,
+        remainingFlour: dough.main.flour,
+        remainingWater: dough.main.water,
+        pct: poolishPct,
+      }, flour)
+    : method === 'direct' && (lang === 'de' || lang === 'en' || lang === 'sl') && (oven === 'homeStone' || oven === 'ooni' || oven === 'homePan')
+      ? getDetailedDirectStepsLocalized(lang, dough.total, dough.totalDough, pizzas, effectiveBall, diameter, fridgeHours, roomTemp, dims.cheese, oven, ovenTemp, mixing)
+    : null;
+  const bigaPreparation = method === 'biga'
+    ? {
+      title: ({ hr: 'Faza A: Priprema Bige', en: 'Phase A: Biga preparation', de: 'Phase A: Biga-Vorbereitung', sl: 'Faza A: Priprava bige' }[lang]),
+      info: ({ hr: `Biga čini ${bigaPct}% ukupnog brašna.`, en: `The biga makes up ${bigaPct}% of the total flour.`, de: `Die Biga enthält ${bigaPct}% des Gesamtmehls.`, sl: `Biga predstavlja ${bigaPct}% celotne moke.` }[lang]),
+      steps: [
+        ({ hr: `Pripremite ${dough.preferment?.flour ?? 0} g brašna, ${dough.preferment?.water ?? 0} g vode i ${dough.preferment?.yeast ?? 0} g kvasca.`, en: `Prepare ${dough.preferment?.flour ?? 0} g flour, ${dough.preferment?.water ?? 0} g water, and ${dough.preferment?.yeast ?? 0} g yeast.`, de: `Bereiten Sie ${dough.preferment?.flour ?? 0} g Mehl, ${dough.preferment?.water ?? 0} g Wasser und ${dough.preferment?.yeast ?? 0} g Hefe vor.`, sl: `Pripravite ${dough.preferment?.flour ?? 0} g moke, ${dough.preferment?.water ?? 0} g vode in ${dough.preferment?.yeast ?? 0} g kvasa.` }[lang]),
+        ({ hr: `Rukama kratko povežite sastojke; smjesa treba ostati mrvičasta. Ostavite Bigu ${prefermentRoomHours} sati na ${roomTemp} °C.`, en: `Briefly combine the ingredients; keep the mixture crumbly. Leave the Biga for ${prefermentRoomHours} hours at ${roomTemp} °C.`, de: `Vermengen Sie die Zutaten kurz; die Masse soll krümelig bleiben. Lassen Sie die Biga ${prefermentRoomHours} Stunden bei ${roomTemp} °C stehen.`, sl: `Sestavine na kratko povežite; zmes naj ostane drobtinasta. Bigo pustite ${prefermentRoomHours} ur pri ${roomTemp} °C.` }[lang]),
+        ({ hr: `Pokrijte Bigu i prebacite je u hladnjak na ${prefermentFridgeHours} sati pri ${fridgeTemp} °C. Ukupno: ${bigaHours} sati.`, en: `Cover the Biga and refrigerate it for ${prefermentFridgeHours} hours at ${fridgeTemp} °C. Total: ${bigaHours} hours.`, de: `Decken Sie die Biga ab und stellen Sie sie ${prefermentFridgeHours} Stunden bei ${fridgeTemp} °C in den Kühlschrank. Gesamt: ${bigaHours} Stunden.`, sl: `Bigo pokrijte in jo prestavite v hladilnik za ${prefermentFridgeHours} ur pri ${fridgeTemp} °C. Skupaj: ${bigaHours} ur.` }[lang]),
+      ],
+      timers: [{ id: `biga-fermentation-${mixing}`, seconds: bigaHours * 3600, kind: 'rt' as const }],
+    }
+    : null;
+  const poolishPreparation = method === 'poolish'
+    ? {
+      title: ({ hr: 'Faza A: Priprema Poolisha', en: 'Phase A: Poolish preparation', de: 'Phase A: Poolish-Vorbereitung', sl: 'Faza A: Priprava Poolisha' }[lang]),
+      info: ({
+        hr: `Poolish čini ${poolishPct}% ukupnog brašna uz 100% hidrataciju predfermenta.`,
+        en: `The Poolish uses ${poolishPct}% of the total flour at 100% preferment hydration.`,
+        de: `Der Poolish enthält ${poolishPct}% des Gesamtmehls bei 100% Vorteighydration.`,
+        sl: `Poolish vsebuje ${poolishPct}% celotne moke pri 100% hidraciji predtesta.`,
+      }[lang]),
+      steps: [
+        ({
+          hr: `Pripremite ${dough.preferment?.flour ?? 0} g brašna, ${dough.preferment?.water ?? 0} g vode i ${dough.preferment?.yeast ?? 0} g kvasca za Poolish.`,
+          en: `Prepare ${dough.preferment?.flour ?? 0} g flour, ${dough.preferment?.water ?? 0} g water, and ${dough.preferment?.yeast ?? 0} g yeast for the Poolish.`,
+          de: `Bereiten Sie ${dough.preferment?.flour ?? 0} g Mehl, ${dough.preferment?.water ?? 0} g Wasser und ${dough.preferment?.yeast ?? 0} g Hefe für den Poolish vor.`,
+          sl: `Pripravite ${dough.preferment?.flour ?? 0} g moke, ${dough.preferment?.water ?? 0} g vode in ${dough.preferment?.yeast ?? 0} g kvasa za Poolish.`,
+        }[lang]),
+        ({
+          hr: `U vodi za Poolish otopite ${dough.preferment?.yeast ?? 0} g kvasca.`,
+          en: `Dissolve ${dough.preferment?.yeast ?? 0} g yeast in the Poolish water.`,
+          de: `Lösen Sie ${dough.preferment?.yeast ?? 0} g Hefe im Poolish-Wasser auf.`,
+          sl: `V vodi za Poolish raztopite ${dough.preferment?.yeast ?? 0} g kvasa.`,
+        }[lang]),
+        ({
+          hr: `Dodajte ${dough.preferment?.flour ?? 0} g brašna i miješajte pjenjačom ili vilicom dok smjesa ne bude glatka i tekuća.`,
+          en: `Add ${dough.preferment?.flour ?? 0} g flour and mix with a whisk or fork until smooth and liquid.`,
+          de: `Geben Sie ${dough.preferment?.flour ?? 0} g Mehl dazu und mischen Sie, bis die Masse glatt und flüssig ist.`,
+          sl: `Dodajte ${dough.preferment?.flour ?? 0} g moke in mešajte, dokler zmes ni gladka in tekoča.`,
+        }[lang]),
+        ({
+          hr: `Pokrijte Poolish i ostavite ga ${prefermentRoomHours} sati na ${roomTemp} °C.`,
+          en: `Cover the Poolish and leave it at ${roomTemp} °C for ${prefermentRoomHours} hours.`,
+          de: `Decken Sie den Poolish ab und lassen Sie ihn ${prefermentRoomHours} Stunden bei ${roomTemp} °C stehen.`,
+          sl: `Poolish pokrijte in ga pustite ${prefermentRoomHours} ur pri ${roomTemp} °C.`,
+        }[lang]),
+        ({
+          hr: `Prebacite Poolish u hladnjak na ${prefermentFridgeHours} sati pri ${fridgeTemp} °C. Ukupna fermentacija Poolisha traje ${poolishHours} sati.`,
+          en: `Move the Poolish to the refrigerator at ${fridgeTemp} °C for ${prefermentFridgeHours} hours. Total Poolish fermentation: ${poolishHours} hours.`,
+          de: `Stellen Sie den Poolish für ${prefermentFridgeHours} Stunden bei ${fridgeTemp} °C in den Kühlschrank. Gesamte Poolish-Fermentation: ${poolishHours} Stunden.`,
+          sl: `Poolish prestavite v hladilnik pri ${fridgeTemp} °C za ${prefermentFridgeHours} ur. Skupna fermentacija Poolisha traja ${poolishHours} ur.`,
+        }[lang]),
+      ],
+      timers: [
+        { id: 'poolish-fermentation', seconds: poolishHours * 3600, kind: 'rt' as const },
+      ],
+    }
+    : null;
+  const poolishMixSteps = method === 'poolish' ? ({
+    hr: [
+      'Operite i temeljito osušite ruke.',
+      'Hladni Poolish prelijte u posudu za ručni zamjes.',
+      `Dodajte preostalih ${dough.main.flour} g brašna i lagano povežite Poolish s brašnom.`,
+      `Dodajte ${Math.round(dough.main.water * 0.9)} g preostale vode, zatim postupno dodajte još ${Math.max(0, dough.main.water - Math.round(dough.main.water * 0.9))} g vode.`,
+      `Dodajte ${dough.total.salt} g soli kao zaseban korak i nastavite mijesiti.`,
+      `Dodajte ${dough.total.oil} g maslinovog ulja i mijesite dok ga tijesto potpuno ne upije.`,
+    ],
+    en: [
+      'Wash and thoroughly dry your hands.',
+      'Pour the cold Poolish into the hand-mixing bowl.',
+      `Add the remaining ${dough.main.flour} g of flour and gently combine it with the Poolish.`,
+      `Add ${Math.round(dough.main.water * 0.9)} g of the remaining water, then gradually add the final ${Math.max(0, dough.main.water - Math.round(dough.main.water * 0.9))} g.`,
+      `Add ${dough.total.salt} g of salt as a separate step and continue kneading.`,
+      `Add ${dough.total.oil} g of olive oil and knead until fully absorbed.`,
+    ],
+    de: [
+      'Waschen und trocknen Sie Ihre Hände gründlich.',
+      'Gießen Sie den kalten Poolish in die Knetschüssel.',
+      `Geben Sie ${dough.main.flour} g restliches Mehl dazu und verbinden Sie es vorsichtig mit dem Poolish.`,
+      `Geben Sie ${Math.round(dough.main.water * 0.9)} g des restlichen Wassers hinzu und anschließend die letzten ${Math.max(0, dough.main.water - Math.round(dough.main.water * 0.9))} g nach und nach.`,
+      `Geben Sie ${dough.total.salt} g Salz als separaten Schritt hinzu und kneten Sie weiter.`,
+      `Geben Sie ${dough.total.oil} g Olivenöl hinzu und kneten Sie, bis es vollständig aufgenommen ist.`,
+    ],
+    sl: [
+      'Umijte in temeljito osušite roke.',
+      'Hladni Poolish prelijte v posodo za ročno gnetenje.',
+      `Dodajte preostalih ${dough.main.flour} g moke in jo nežno povežite s Poolishem.`,
+      `Dodajte ${Math.round(dough.main.water * 0.9)} g preostale vode, nato postopoma še zadnjih ${Math.max(0, dough.main.water - Math.round(dough.main.water * 0.9))} g.`,
+      `Dodajte ${dough.total.salt} g soli kot ločen korak in nadaljujte z gnetenjem.`,
+      `Dodajte ${dough.total.oil} g oljčnega olja in gnetite, dokler se popolnoma ne vpije.`,
+    ],
+  }[lang]) : null;
   const bakingTemp =
-    oven === 'homeStone' ? '300°C + grill · 4–6 min' :
+    oven === 'homeStone' ? '270–300°C · 4–5 min + grill 30–90 s' :
     oven === 'ooni' ? '430–480°C · 60–90 s' : '280°C · 8–10 min';
-
   return (
     <ImageBackground
       source={require('../../assets/images/bg-wood-flour.png')}
@@ -306,14 +688,55 @@ export default function CalculatorHome() {
 
       <ScrollView contentContainerStyle={{ padding: SPACING.lg, paddingBottom: SPACING.xxxl * 2, gap: SPACING.lg }} keyboardShouldPersistTaps="handled">
 
-        {/* 1. FLOUR - collapsed header, expands on tap, auto-closes on select */}
+        {/* 1. PIZZA STYLE */}
+        <View style={styles.card}>
+          <Pressable testID="style-header" onPress={() => setStyleExpanded((value) => !value)} style={styles.styleHeaderRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.cardTitle}>1 · {t.calc.pizzaStyle}</Text>
+              {!styleExpanded ? <Text style={styles.hint}>{t.calc.pizzaStyles[pizzaStyle].name}</Text> : null}
+            </View>
+            {hydration !== styleProfile.hydration || saltPct !== styleProfile.saltPct || oilPct !== styleProfile.oilPct || diameter !== styleProfile.defaultDiameter ? (
+              <Pressable testID="style-reset" onPress={resetStyleDefaults} style={styles.resetInlineBtn}>
+                <Icon name="refresh" size={12} color={COLORS.muted} />
+                <Text style={styles.resetInlineText}>{t.calc.pizzaStyleCustom}</Text>
+              </Pressable>
+            ) : null}
+            <Icon name={styleExpanded ? 'chevron-up' : 'chevron-down'} size={20} color={COLORS.brand} />
+          </Pressable>
+          {styleExpanded ? <View style={{ gap: 6 }}>
+            {(['neapolitan', 'romana', 'ny_style'] as PizzaStyle[]).map((key) => {
+              const active = pizzaStyle === key;
+              const item = t.calc.pizzaStyles[key];
+              return (
+                <View key={key} style={styles.styleRowWrap}>
+                  <Pressable testID={`style-${key}`} onPress={() => changeStyle(key)} style={[styles.styleRow, active && styles.styleRowActive]}>
+                    <Image source={styleImages[key]} style={styles.styleThumb} resizeMode="cover" />
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                      <Text style={[styles.styleName, active && styles.styleNameActive]}>{item.name}</Text>
+                      <Text style={[styles.styleDescription, active && styles.styleDescriptionActive]} numberOfLines={2}>{item.description}</Text>
+                    </View>
+                    {active ? <Icon name="checkmark-circle" size={18} color="#fff" /> : null}
+                  </Pressable>
+                  <Pressable testID={`style-info-${key}`} onPress={() => setStyleInfo(key)} hitSlop={8} style={styles.infoBtn}>
+                    <Icon name="information-circle-outline" size={19} color={active ? COLORS.brand : COLORS.muted} />
+                  </Pressable>
+                </View>
+              );
+            })}
+            </View> : null}
+        </View>
+
+        {/* 2. FLOUR - collapsed header, expands on tap, auto-closes on select */}
         <View style={styles.card}>
           <Pressable
             testID="flour-header"
             onPress={() => setFlourExpanded((v) => !v)}
             style={styles.flourHeader}
           >
-            <Text style={styles.flourHeaderText}>{t.flourSection.headerCollapsed}</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.flourHeaderText}>2 · {t.flourSection.headerCollapsed}</Text>
+              {!flourExpanded ? <Text style={styles.hint}>{FLOURS_BY_LANG[lang].find((entry) => entry.key === flour)?.label}</Text> : null}
+            </View>
             <Icon name={flourExpanded ? 'chevron-up' : 'chevron-down'} size={20} color={COLORS.brand} />
           </Pressable>
 
@@ -328,6 +751,7 @@ export default function CalculatorHome() {
                       onPress={() => { changeFlour(f.key); setFlourExpanded(false); }}
                       style={[styles.flourCompact, active && styles.flourCompactActive]}
                     >
+                      <Image source={FLOUR_IMAGES[f.key]} style={styles.flourIcon} resizeMode="contain" />
                       <Text style={[styles.flourCompactLabel, active && { color: '#fff' }]} numberOfLines={1}>{f.label}</Text>
                       {active ? <Icon name="checkmark-circle" size={16} color="#fff" style={{ marginLeft: 4 }} /> : null}
                     </Pressable>
@@ -372,7 +796,7 @@ export default function CalculatorHome() {
 
               <View style={[styles.row, { marginTop: SPACING.sm }]}>
                 <Text style={styles.label}>{t.flourSection.blendPct}</Text>
-                <View style={styles.stepper}>
+                <View style={[styles.stepper, idealPreferment && styles.stepperIdeal]}>
                   <Pressable testID="blendPct-minus" onPress={() => changeBlend('pct', Math.max(5, blendPctA - 5))} style={styles.stepBtn}>
                     <Icon name="remove" size={20} color={COLORS.brand} />
                   </Pressable>
@@ -392,7 +816,7 @@ export default function CalculatorHome() {
 
         {/* 2. VELIČINA PIZZE */}
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>2 · {t.calc.dimensions}</Text>
+          <Text style={styles.cardTitle}>3 · {t.calc.dimensions}</Text>
           <View style={styles.row}>
             <Text style={styles.label}>{t.calc.pizzas}</Text>
             <View style={styles.stepper}>
@@ -460,7 +884,7 @@ export default function CalculatorHome() {
           ) : null}
 
           <Text style={[styles.label, { marginTop: SPACING.md }]}>{t.calc.diameter}</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+          <View style={styles.diameterRow}>
             {DIAMETERS.map((d) => (
               <Pressable key={d} testID={`diam-${d}`} onPress={() => step(() => { setDiameter(d); setCustomBallWeight(null); setCustomBallInput(''); })} style={[styles.chip, diameter === d && styles.chipActive]}>
                 <Text style={[styles.chipText, diameter === d && styles.chipTextActive]}>{d} cm</Text>
@@ -477,26 +901,20 @@ export default function CalculatorHome() {
               placeholderTextColor={COLORS.muted}
               style={styles.customInput}
             />
-          </ScrollView>
-
-          {/* Proportional pizza preview — real-size ratio (26 vs 40 cm) */}
-          <View style={styles.pizzaPreviewWrap}>
-            <View style={styles.pizzaScale}>
-              {/* Faded reference: 40cm (max) */}
-              <View style={[styles.pizzaCircleGhost, { width: 200, height: 200 }]} />
-              {/* Current diameter — scales relative to 40cm max */}
-              <View style={[styles.pizzaCircle, { width: 200 * (diameter / 40), height: 200 * (diameter / 40) }]}>
-                <Text style={styles.pizzaCircleText}>{diameter} cm</Text>
-              </View>
-            </View>
-            <Text style={styles.pizzaPreviewHint}>{t.pizzaPreview.hint}</Text>
           </View>
+
         </View>
 
-        {/* 3. METHOD + HYDRATION + TEMP */}
+            {/* 4. METHOD + HYDRATION + TEMP */}
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>3 · {t.calc.method} + {t.calc.hydration}</Text>
-
+          <Pressable testID="method-header" onPress={() => setMethodExpanded((value) => !value)} style={styles.styleHeaderRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.cardTitle}>4 · {t.calc.method} + {t.calc.hydration}</Text>
+              {!methodExpanded ? <Text style={styles.hint}>{method === 'direct' ? t.calc.direct : method === 'biga' ? t.calc.biga : t.calc.poolish}</Text> : null}
+            </View>
+            <Icon name={methodExpanded ? 'chevron-up' : 'chevron-down'} size={20} color={COLORS.brand} />
+          </Pressable>
+          {methodExpanded ? <>
           <Text style={styles.label}>{t.calc.method}</Text>
           <View style={styles.pillGroup}>
             {[
@@ -504,21 +922,99 @@ export default function CalculatorHome() {
               { k: 'biga' as const, l: t.calc.biga },
               { k: 'poolish' as const, l: t.calc.poolish },
             ].map((m) => (
-              <Pressable
+              <View
                 key={m.k}
-                testID={`method-${m.k}`}
-                onPress={() => { try { Haptics.selectionAsync(); } catch {}; setMethod(m.k); setShowMixSteps(true); }}
                 style={[styles.pill, method === m.k && styles.pillActive]}
               >
-                <Text style={[styles.pillText, method === m.k && styles.pillTextActive]}>{m.l}</Text>
-              </Pressable>
+                <Pressable
+                  testID={`method-${m.k}`}
+                  onPress={() => { try { Haptics.selectionAsync(); } catch {}; setMethod(m.k); setShowMixSteps(true); }}
+                  style={styles.pillSelect}
+                >
+                  <Text style={[styles.pillText, method === m.k && styles.pillTextActive]}>{m.l}</Text>
+                </Pressable>
+                <Pressable testID={`method-info-${m.k}`} onPress={() => setMethodInfo(m.k)} hitSlop={8} style={styles.infoBtn}>
+                  <Icon name="information-circle-outline" size={18} color={method === m.k ? '#fff' : COLORS.muted} />
+                </Pressable>
+              </View>
             ))}
           </View>
+
+          {method === 'biga' ? (
+            <>
+            <View style={[styles.row, { marginTop: SPACING.md }] }>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.label}>{({ hr: 'Biga u zamjesu', en: 'Biga in final mix', de: 'Biga im Hauptteig', sl: 'Biga v končnem testu' }[lang])} ({bigaPct}%)</Text>
+                <Text style={styles.subLabel}>{({ hr: 'Postotak brašna koji ide u bigu', en: 'Percentage of flour used in the biga', de: 'Mehlanteil für die Biga', sl: 'Odstotek moke za bigo' }[lang])}</Text>
+              </View>
+              <View style={styles.stepper}>
+                <Pressable testID="biga-minus" onPress={() => step(() => setBigaPct(Math.max(20, bigaPct - 5)))} style={styles.stepBtn}>
+                  <Icon name="remove" size={20} color={COLORS.brand} />
+                </Pressable>
+                <Text style={styles.stepVal}>{bigaPct}%</Text>
+                <Pressable testID="biga-plus" onPress={() => step(() => setBigaPct(Math.min(100, bigaPct + 5)))} style={styles.stepBtn}>
+                  <Icon name="add" size={20} color={COLORS.brand} />
+                </Pressable>
+              </View>
+            </View>
+            {method === 'biga' ? (
+              <Text style={[styles.hint, { color: COLORS.warning }]}>
+                {bigaPct === 100
+                  ? ({ hr: 'Upozorenje: nema preostalog brašna. U završni zamjes dodaje se samo preostala voda.', en: 'Warning: no flour remains. Only the remaining water is added to the final mix.', de: 'Warnung: Es bleibt kein Mehl übrig. Zum Hauptteig wird nur das restliche Wasser gegeben.', sl: 'Opozorilo: preostale moke ni. V končno mešanico dodate samo preostalo vodo.' }[lang])
+                  : ({ hr: 'Upozorenje: provjerite postotak bige i količine za završni zamjes.', en: 'Warning: check the biga percentage and final-mix quantities.', de: 'Warnung: Prüfen Sie den Biga-Anteil und die Mengen für den Hauptteig.', sl: 'Opozorilo: preverite odstotek bige in količine za končno mešanico.' }[lang])}
+              </Text>
+            ) : null}
+            <View style={[styles.row, { marginTop: SPACING.sm }] }>
+              <View style={{ flex: 1 }}>
+                <View style={styles.labelWithInfo}>
+                  <Text style={styles.label}>{({ hr: 'Trajanje fermentacije Bige', en: 'Biga fermentation time', de: 'Biga-Fermentationszeit', sl: 'Čas fermentacije Bige' }[lang])}</Text>
+                  <Pressable testID="biga-fermentation-info" onPress={() => Alert.alert(fermentationInfoTitle, fermentationInfoBody)} style={styles.infoBtn} hitSlop={8}><Icon name="information-circle-outline" size={18} color={COLORS.brand} /></Pressable>
+                </View>
+                <Text style={styles.subLabel}>{({ hr: 'Ovo vrijeme ulazi u izračun kvasca', en: 'This time is included in the yeast calculation', de: 'Diese Zeit wird in die Hefeberechnung einbezogen', sl: 'Ta čas je vključen v izračun kvasa' }[lang])}</Text>
+              </View>
+              <View style={[styles.stepper, idealPreferment && styles.stepperIdeal]}>
+                <Pressable testID="biga-hours-minus" onPress={() => step(() => setBigaHours(Math.max(4, bigaHours - 1)))} style={styles.stepBtn}><Icon name="remove" size={20} color={COLORS.brand} /></Pressable>
+                <Text style={[styles.stepVal, idealPreferment && styles.stepValIdeal]}>{bigaHours}h</Text>
+                <Pressable testID="biga-hours-plus" onPress={() => step(() => setBigaHours(Math.min(48, bigaHours + 1)))} style={styles.stepBtn}><Icon name="add" size={20} color={COLORS.brand} /></Pressable>
+              </View>
+            </View>
+            </>
+          ) : null}
+
+          {method === 'poolish' ? (
+            <>
+              <View style={[styles.row, { marginTop: SPACING.md }] }>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.label}>{({ hr: 'Poolish u zamjesu', en: 'Poolish in final mix', de: 'Poolish im Hauptteig', sl: 'Poolish v končnem testu' }[lang])} ({poolishPct}%)</Text>
+                  <Text style={styles.subLabel}>{({ hr: 'Postotak brašna koji ide u Poolish', en: 'Percentage of flour used in the Poolish', de: 'Mehlanteil für den Poolish', sl: 'Odstotek moke za Poolish' }[lang])}</Text>
+                </View>
+                <View style={styles.stepper}>
+                  <Pressable testID="poolish-minus" onPress={() => step(() => setPoolishPct(Math.max(20, poolishPct - 5)))} style={styles.stepBtn}><Icon name="remove" size={20} color={COLORS.brand} /></Pressable>
+                  <Text style={styles.stepVal}>{poolishPct}%</Text>
+                  <Pressable testID="poolish-plus" onPress={() => step(() => setPoolishPct(Math.min(100, poolishPct + 5)))} style={styles.stepBtn}><Icon name="add" size={20} color={COLORS.brand} /></Pressable>
+                </View>
+              </View>
+              <View style={[styles.row, { marginTop: SPACING.sm }] }>
+                <View style={{ flex: 1 }}>
+                  <View style={styles.labelWithInfo}>
+                    <Text style={styles.label}>{({ hr: 'Trajanje fermentacije Poolisha', en: 'Poolish fermentation time', de: 'Poolish-Fermentationszeit', sl: 'Čas fermentacije Poolisha' }[lang])}</Text>
+                    <Pressable testID="poolish-fermentation-info" onPress={() => Alert.alert(fermentationInfoTitle, fermentationInfoBody)} style={styles.infoBtn} hitSlop={8}><Icon name="information-circle-outline" size={18} color={COLORS.brand} /></Pressable>
+                  </View>
+                  <Text style={styles.subLabel}>{({ hr: 'Ovo vrijeme ulazi u izračun kvasca', en: 'This time is included in the yeast calculation', de: 'Diese Zeit wird in die Hefeberechnung einbezogen', sl: 'Ta čas je vključen v izračun kvasa' }[lang])}</Text>
+                </View>
+                <View style={[styles.stepper, idealPreferment && styles.stepperIdeal]}>
+                  <Pressable testID="poolish-hours-minus" onPress={() => step(() => setPoolishHours(Math.max(4, poolishHours - 1)))} style={styles.stepBtn}><Icon name="remove" size={20} color={COLORS.brand} /></Pressable>
+                  <Text style={[styles.stepVal, idealPreferment && styles.stepValIdeal]}>{poolishHours}h</Text>
+                  <Pressable testID="poolish-hours-plus" onPress={() => step(() => setPoolishHours(Math.min(48, poolishHours + 1)))} style={styles.stepBtn}><Icon name="add" size={20} color={COLORS.brand} /></Pressable>
+                </View>
+              </View>
+            </>
+          ) : null}
 
           <View style={styles.hydRow}>
             <View style={{ flex: 1 }}>
               <Text style={styles.label}>{t.calc.hydration}</Text>
-              <Text style={styles.subLabel}>{t.calc.idealHydration}: {flourProfile.min}–{flourProfile.max}% (◎ {flourProfile.ideal}%)</Text>
+              <Text style={styles.subLabel}>{t.calc.idealHydration}: {flourProfile.min}–{flourProfile.max}% (◎ {styleProfile.hydration}%)</Text>
             </View>
             <View style={[styles.stepper, isIdealHydration && styles.stepperIdeal, !isIdealHydration && inRange && styles.stepperInRange]}>
               <Pressable testID="hyd-minus" onPress={() => step(() => setHydration(Math.max(50, hydration - 1)))} style={styles.stepBtn}>
@@ -528,6 +1024,24 @@ export default function CalculatorHome() {
               <Pressable testID="hyd-plus" onPress={() => step(() => setHydration(Math.min(95, hydration + 1)))} style={styles.stepBtn}>
                 <Icon name="add" size={20} color={isIdealHydration ? COLORS.success : COLORS.brand} />
               </Pressable>
+            </View>
+          </View>
+
+          <View style={[styles.row, { marginTop: SPACING.md }] }>
+            <Text style={styles.label}>{t.calc.salt}</Text>
+            <View style={[styles.stepper, isIdealSalt && styles.stepperIdeal]}>
+              <Pressable testID="salt-minus" onPress={() => step(() => setSaltPct(Math.max(0, Math.round((saltPct - 0.1) * 10) / 10)))} style={styles.stepBtn}><Icon name="remove" size={20} color={COLORS.brand} /></Pressable>
+              <Text style={[styles.stepVal, isIdealSalt && styles.stepValIdeal]}>{saltPct}%</Text>
+              <Pressable testID="salt-plus" onPress={() => step(() => setSaltPct(Math.min(6, Math.round((saltPct + 0.1) * 10) / 10)))} style={styles.stepBtn}><Icon name="add" size={20} color={COLORS.brand} /></Pressable>
+            </View>
+          </View>
+
+          <View style={[styles.row, { marginTop: SPACING.sm }] }>
+            <Text style={styles.label}>{t.calc.oil}</Text>
+            <View style={[styles.stepper, isIdealOil && styles.stepperIdeal]}>
+              <Pressable testID="oil-minus" onPress={() => step(() => setOilPct(Math.max(0, Math.round((oilPct - 0.5) * 10) / 10)))} style={styles.stepBtn}><Icon name="remove" size={20} color={COLORS.brand} /></Pressable>
+              <Text style={[styles.stepVal, isIdealOil && styles.stepValIdeal]}>{oilPct}%</Text>
+              <Pressable testID="oil-plus" onPress={() => step(() => setOilPct(Math.min(10, Math.round((oilPct + 0.5) * 10) / 10)))} style={styles.stepBtn}><Icon name="add" size={20} color={COLORS.brand} /></Pressable>
             </View>
           </View>
 
@@ -544,7 +1058,7 @@ export default function CalculatorHome() {
             </View>
           </View>
 
-          <View style={[styles.row, { marginTop: SPACING.sm }]}>
+          <View style={[styles.row, { marginTop: SPACING.sm }] }>
             <Text style={styles.label}>{t.calc.roomHours}</Text>
             <View style={styles.stepper}>
               <Pressable testID="rh-minus" onPress={() => step(() => setRoomHours(Math.max(0, roomHours - 1)))} style={styles.stepBtn}>
@@ -557,7 +1071,7 @@ export default function CalculatorHome() {
             </View>
           </View>
 
-          <View style={[styles.row, { marginTop: SPACING.sm }]}>
+          <View style={[styles.row, { marginTop: SPACING.sm }] }>
             <Text style={styles.label}>{t.calc.fridgeHours}</Text>
             <View style={styles.stepper}>
               <Pressable testID="fh-minus" onPress={() => step(() => setFridgeHours(Math.max(0, fridgeHours - 2)))} style={styles.stepBtn}>
@@ -582,18 +1096,48 @@ export default function CalculatorHome() {
               </Pressable>
             </View>
           </View>
+          </> : null}
+        </View>
+
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>6 · {t.calc.baking}</Text>
+          <View style={styles.ovenRow}>
+            <OvenCard active={oven === 'homeStone'} onPress={() => step(() => selectOven('homeStone', 300))} imageSrc={require('../../assets/images/oven-home-stone.png')} title={t.calc.homeStone} testID="oven-homeStone" />
+            <OvenCard active={oven === 'ooni'} onPress={() => step(() => selectOven('ooni', 450))} imageSrc={require('../../assets/images/oven-ooni.png')} title={t.calc.ooni} testID="oven-ooni" />
+            <OvenCard active={oven === 'homePan'} onPress={() => step(() => selectOven('homePan', 250))} imageSrc={require('../../assets/images/oven-home-pan.png')} title={t.calc.homePan} testID="oven-homePan" />
+          </View>
+          <View style={styles.bakeInstructions}>
+            <View style={styles.bakeTemperatureInputRow}>
+              <Text style={styles.bakeTempLabel}>{ovenTempLabel}</Text>
+              <TextInput
+                testID="oven-temperature"
+                value={ovenTempInput}
+                onChangeText={(value) => {
+                  const clean = value.replace(/[^0-9]/g, '').slice(0, 3);
+                  setOvenTempInput(clean);
+                  const parsed = Number(clean);
+                  if (clean !== '' && Number.isFinite(parsed) && parsed >= 200 && parsed <= 500) setOvenTemp(parsed);
+                }}
+                onBlur={commitOvenTemperature}
+                keyboardType="numeric"
+                style={styles.customInput}
+              />
+              <Text style={styles.bakeTempUnit}>°C</Text>
+            </View>
+            <Text style={styles.bakeText}>{bakingDuration}</Text>
+          </View>
         </View>
 
         {/* 4. MIXING */}
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>4 · {t.calc.mixingTitle}</Text>
+          <Text style={styles.cardTitle}>5 · {t.calc.mixingTitle}</Text>
           <View style={styles.segmentedRow}>
-            <Pressable testID="mix-hand" onPress={() => step(() => setMixing('hand'))} style={[styles.segBtn, mixing === 'hand' && styles.segBtnActive]}>
-              <Icon name="hand-left" size={16} color={mixing === 'hand' ? '#fff' : COLORS.brand} />
+            <Pressable testID="mix-hand" onPress={() => step(() => { setMixing('hand'); setShowMixSteps(true); })} style={[styles.segBtn, mixing === 'hand' && styles.segBtnActive]}>
+              <Image source={require('../../assets/images/hand-left-outline.png')} style={styles.mixIcon} resizeMode="contain" />
               <Text style={[styles.segText, mixing === 'hand' && { color: '#fff' }]}>{t.calc.handMixTitle}</Text>
             </Pressable>
-            <Pressable testID="mix-mixer" onPress={() => step(() => setMixing('mixer'))} style={[styles.segBtn, mixing === 'mixer' && styles.segBtnActive]}>
-              <Icon name="cog" size={16} color={mixing === 'mixer' ? '#fff' : COLORS.brand} />
+            <Pressable testID="mix-mixer" onPress={() => step(() => { setMixing('mixer'); setShowMixSteps(true); })} style={[styles.segBtn, mixing === 'mixer' && styles.segBtnActive]}>
+              <Image source={require('../../assets/images/hardware-chip-outline.png')} style={styles.mixIcon} resizeMode="contain" />
               <Text style={[styles.segText, mixing === 'mixer' && { color: '#fff' }]}>{t.calc.mixerTitle}</Text>
             </Pressable>
           </View>
@@ -603,20 +1147,80 @@ export default function CalculatorHome() {
           </Pressable>
           {showMixSteps ? (
             <View style={styles.stepsBox}>
-              {method === 'direct' ? (
+              {(bigaPreparation || poolishPreparation) ? (
+                <PhaseBlock
+                  title={(bigaPreparation || poolishPreparation)!.title}
+                  steps={(bigaPreparation || poolishPreparation)!.steps}
+                  bigaInfo={(bigaPreparation || poolishPreparation)!.info}
+                  phaseKey={`${method}-${mixing}-preparation`}
+                  timers={bigaPreparation ? [
+                    { id: `biga-fermentation-${mixing}`, seconds: bigaHours * 3600, kind: 'rt' as const },
+                  ] : (poolishPreparation || { timers: [] }).timers}
+                  completed={completedSteps}
+                  onToggle={toggleStep}
+                  activeTimers={activeTimers}
+                  onStartTimer={startTimer}
+                  onStopTimer={stopTimer}
+                  lang={lang}
+                />
+              ) : null}
+              {detailedDirectSteps ? (
+                detailedDirectSteps.map((phase, index) => (
+                  <PhaseBlock
+                    key={`detailed-direct-${pizzaStyle}-${mixing}-${index}`}
+                    title={phase.title}
+                    steps={phase.steps}
+                    waterInfo={phase.waterInfo}
+                    containerOilInfo={phase.containerOilInfo}
+                    fermentationInfo={phase.fermentationInfo}
+                    fermentationSignsInfo={phase.fermentationSignsInfo}
+                    degassingInfo={phase.degassingInfo}
+                    doughHandlingInfo={phase.doughHandlingInfo}
+                    temperingInfo={phase.temperingInfo}
+                    proofingInfo={phase.proofingInfo}
+                    ovenTimingInfo={phase.ovenTimingInfo}
+                    bakingCheckInfo={phase.bakingCheckInfo}
+                    bakingInfo={phase.bakingInfo}
+                    phaseKey={`detailed-direct-${pizzaStyle}-${mixing}-${index}`}
+                    timers={phase.timers}
+                    completed={completedSteps}
+                    onToggle={toggleStep}
+                    activeTimers={activeTimers}
+                    onStartTimer={startTimer}
+                    onStopTimer={stopTimer}
+                    lang={lang}
+                  />
+                ))
+              ) : stylePreparationSteps ? (
+                stylePreparationSteps.map((phase, index) => (
+                  <PhaseBlock
+                    key={`${pizzaStyle}-${method}-${mixing}-${index}`}
+                    title={phase.title}
+                    steps={phase.steps}
+                    phaseKey={`style-${pizzaStyle}-${method}-${mixing}-${index}`}
+                    timers={phase.timers}
+                    completed={completedSteps}
+                    onToggle={toggleStep}
+                    activeTimers={activeTimers}
+                    onStartTimer={startTimer}
+                    onStopTimer={stopTimer}
+                    lang={lang}
+                  />
+                ))
+              ) : method === 'direct' ? (
                 mixing === 'hand' ? (
                   <>
-                    <PhaseBlock title={t.calc.handMixSteps.A.title} steps={t.calc.handMixSteps.A.steps} phaseKey={`direct-hand-A`} completed={completedSteps} onToggle={toggleStep} activeTimers={activeTimers} onStartTimer={startTimer} onStopTimer={stopTimer} lang={lang} />
-                    <PhaseBlock title={t.calc.handMixSteps.B.title} steps={t.calc.handMixSteps.B.steps} phaseKey={`direct-hand-B`} completed={completedSteps} onToggle={toggleStep} activeTimers={activeTimers} onStartTimer={startTimer} onStopTimer={stopTimer} lang={lang} />
-                    <PhaseBlock title={t.calc.handMixSteps.C.title} steps={t.calc.handMixSteps.C.steps} phaseKey={`direct-hand-C`} completed={completedSteps} onToggle={toggleStep} activeTimers={activeTimers} onStartTimer={startTimer} onStopTimer={stopTimer} lang={lang} />
-                    <PhaseBlock title={t.calc.handMixSteps.D.title} steps={t.calc.handMixSteps.D.steps} phaseKey={`direct-hand-D`} completed={completedSteps} onToggle={toggleStep} activeTimers={activeTimers} onStartTimer={startTimer} onStopTimer={stopTimer} lang={lang} />
+                    <PhaseBlock title={t.calc.handMixSteps.A.title} steps={adaptFermentationSteps(t.calc.handMixSteps.A.steps, roomHours, fridgeHours, fridgeTemp, lang)} phaseKey={`direct-hand-A`} timers={getDirectPhaseTimers('direct-hand-A', roomHours, fridgeHours)} completed={completedSteps} onToggle={toggleStep} activeTimers={activeTimers} onStartTimer={startTimer} onStopTimer={stopTimer} lang={lang} />
+                    <PhaseBlock title={t.calc.handMixSteps.B.title} steps={adaptFermentationSteps(t.calc.handMixSteps.B.steps, roomHours, fridgeHours, fridgeTemp, lang)} phaseKey={`direct-hand-B`} timers={getDirectPhaseTimers('direct-hand-B', roomHours, fridgeHours)} completed={completedSteps} onToggle={toggleStep} activeTimers={activeTimers} onStartTimer={startTimer} onStopTimer={stopTimer} lang={lang} />
+                    <PhaseBlock title={t.calc.handMixSteps.C.title} steps={adaptDirectPhaseSteps('C', t.calc.handMixSteps.C.steps, roomHours, fridgeHours, fridgeTemp, lang)} phaseKey={`direct-hand-C`} timers={getDirectPhaseTimers('direct-hand-C', roomHours, fridgeHours)} completed={completedSteps} onToggle={toggleStep} activeTimers={activeTimers} onStartTimer={startTimer} onStopTimer={stopTimer} lang={lang} />
+                    <PhaseBlock title={t.calc.handMixSteps.D.title} steps={adaptDirectPhaseSteps('D', t.calc.handMixSteps.D.steps, roomHours, fridgeHours, fridgeTemp, lang)} phaseKey={`direct-hand-D`} timers={getDirectPhaseTimers('direct-hand-D', roomHours, fridgeHours)} completed={completedSteps} onToggle={toggleStep} activeTimers={activeTimers} onStartTimer={startTimer} onStopTimer={stopTimer} lang={lang} />
                   </>
                 ) : (
                   <>
-                    <PhaseBlock title={t.calc.mixerSteps.A.title} steps={t.calc.mixerSteps.A.steps} phaseKey={`direct-mixer-A`} completed={completedSteps} onToggle={toggleStep} activeTimers={activeTimers} onStartTimer={startTimer} onStopTimer={stopTimer} lang={lang} />
-                    <PhaseBlock title={t.calc.mixerSteps.B.title} steps={t.calc.mixerSteps.B.steps} phaseKey={`direct-mixer-B`} completed={completedSteps} onToggle={toggleStep} activeTimers={activeTimers} onStartTimer={startTimer} onStopTimer={stopTimer} lang={lang} />
-                    <PhaseBlock title={t.calc.mixerSteps.C.title} steps={t.calc.mixerSteps.C.steps} phaseKey={`direct-mixer-C`} completed={completedSteps} onToggle={toggleStep} activeTimers={activeTimers} onStartTimer={startTimer} onStopTimer={stopTimer} lang={lang} />
-                    <PhaseBlock title={t.calc.mixerSteps.D.title} steps={t.calc.mixerSteps.D.steps} phaseKey={`direct-mixer-D`} completed={completedSteps} onToggle={toggleStep} activeTimers={activeTimers} onStartTimer={startTimer} onStopTimer={stopTimer} lang={lang} />
+                    <PhaseBlock title={t.calc.mixerSteps.A.title} steps={adaptFermentationSteps(t.calc.mixerSteps.A.steps, roomHours, fridgeHours, fridgeTemp, lang)} phaseKey={`direct-mixer-A`} timers={getDirectPhaseTimers('direct-mixer-A', roomHours, fridgeHours)} completed={completedSteps} onToggle={toggleStep} activeTimers={activeTimers} onStartTimer={startTimer} onStopTimer={stopTimer} lang={lang} />
+                    <PhaseBlock title={t.calc.mixerSteps.B.title} steps={adaptFermentationSteps(t.calc.mixerSteps.B.steps, roomHours, fridgeHours, fridgeTemp, lang)} phaseKey={`direct-mixer-B`} timers={getDirectPhaseTimers('direct-mixer-B', roomHours, fridgeHours)} completed={completedSteps} onToggle={toggleStep} activeTimers={activeTimers} onStartTimer={startTimer} onStopTimer={stopTimer} lang={lang} />
+                    <PhaseBlock title={t.calc.mixerSteps.C.title} steps={adaptDirectPhaseSteps('C', t.calc.mixerSteps.C.steps, roomHours, fridgeHours, fridgeTemp, lang)} phaseKey={`direct-mixer-C`} timers={getDirectPhaseTimers('direct-mixer-C', roomHours, fridgeHours)} completed={completedSteps} onToggle={toggleStep} activeTimers={activeTimers} onStartTimer={startTimer} onStopTimer={stopTimer} lang={lang} />
+                    <PhaseBlock title={t.calc.mixerSteps.D.title} steps={adaptDirectPhaseSteps('D', t.calc.mixerSteps.D.steps, roomHours, fridgeHours, fridgeTemp, lang)} phaseKey={`direct-mixer-D`} timers={getDirectPhaseTimers('direct-mixer-D', roomHours, fridgeHours)} completed={completedSteps} onToggle={toggleStep} activeTimers={activeTimers} onStartTimer={startTimer} onStopTimer={stopTimer} lang={lang} />
                   </>
                 )
               ) : method === 'biga' ? (
@@ -624,9 +1228,9 @@ export default function CalculatorHome() {
                   const path = BIGA_STEPS[lang][mixing];
                   return (
                     <>
-                      <PhaseBlock title={path.p1.title} steps={path.p1.steps} phaseKey={`biga-${mixing}-P1`} completed={completedSteps} onToggle={toggleStep} activeTimers={activeTimers} onStartTimer={startTimer} onStopTimer={stopTimer} lang={lang} />
-                      <PhaseBlock title={path.p2.title} steps={path.p2.steps} phaseKey={`biga-${mixing}-P2`} completed={completedSteps} onToggle={toggleStep} activeTimers={activeTimers} onStartTimer={startTimer} onStopTimer={stopTimer} lang={lang} />
-                      <PhaseBlock title={path.p3.title} steps={path.p3.steps} phaseKey={`biga-${mixing}-P3`} completed={completedSteps} onToggle={toggleStep} activeTimers={activeTimers} onStartTimer={startTimer} onStopTimer={stopTimer} lang={lang} />
+                      {!bigaPreparation ? <PhaseBlock title={path.p1.title} steps={adaptFermentationSteps(path.p1.steps, roomHours, fridgeHours, fridgeTemp, lang)} phaseKey={`biga-${mixing}-P1`} completed={completedSteps} onToggle={toggleStep} activeTimers={activeTimers} onStartTimer={startTimer} onStopTimer={stopTimer} lang={lang} /> : null}
+                      <PhaseBlock title={path.p2.title} steps={adaptFermentationSteps(path.p2.steps, roomHours, fridgeHours, fridgeTemp, lang)} phaseKey={`biga-${mixing}-P2`} completed={completedSteps} onToggle={toggleStep} activeTimers={activeTimers} onStartTimer={startTimer} onStopTimer={stopTimer} lang={lang} />
+                      <PhaseBlock title={path.p3.title} steps={adaptFermentationSteps(path.p3.steps, roomHours, fridgeHours, fridgeTemp, lang)} phaseKey={`biga-${mixing}-P3`} completed={completedSteps} onToggle={toggleStep} activeTimers={activeTimers} onStartTimer={startTimer} onStopTimer={stopTimer} lang={lang} />
                     </>
                   );
                 })()
@@ -635,9 +1239,9 @@ export default function CalculatorHome() {
                   const path = POOLISH_STEPS[lang][mixing];
                   return (
                     <>
-                      <PhaseBlock title={path.p1.title} steps={path.p1.steps} phaseKey={`poolish-${mixing}-P1`} completed={completedSteps} onToggle={toggleStep} activeTimers={activeTimers} onStartTimer={startTimer} onStopTimer={stopTimer} lang={lang} />
-                      <PhaseBlock title={path.p2.title} steps={path.p2.steps} phaseKey={`poolish-${mixing}-P2`} completed={completedSteps} onToggle={toggleStep} activeTimers={activeTimers} onStartTimer={startTimer} onStopTimer={stopTimer} lang={lang} />
-                      <PhaseBlock title={path.p3.title} steps={path.p3.steps} phaseKey={`poolish-${mixing}-P3`} completed={completedSteps} onToggle={toggleStep} activeTimers={activeTimers} onStartTimer={startTimer} onStopTimer={stopTimer} lang={lang} />
+                      <PhaseBlock title={path.p1.title} steps={adaptFermentationSteps(path.p1.steps, roomHours, fridgeHours, fridgeTemp, lang)} phaseKey={`poolish-${mixing}-P1`} timers={[...(roomHours > 0 ? [{ id: 'room-custom', seconds: roomHours * 3600, kind: 'rt' as const }] : []), ...(fridgeHours > 0 ? [{ id: 'fridge-custom', seconds: fridgeHours * 3600, kind: 'fridge' as const }] : [])]} completed={completedSteps} onToggle={toggleStep} activeTimers={activeTimers} onStartTimer={startTimer} onStopTimer={stopTimer} lang={lang} />
+                      <PhaseBlock title={path.p2.title} steps={poolishMixSteps ?? adaptFermentationSteps(path.p2.steps, roomHours, fridgeHours, fridgeTemp, lang)} phaseKey={`poolish-${mixing}-P2`} completed={completedSteps} onToggle={toggleStep} activeTimers={activeTimers} onStartTimer={startTimer} onStopTimer={stopTimer} lang={lang} />
+                      <PhaseBlock title={path.p3.title} steps={adaptFermentationSteps(path.p3.steps, roomHours, fridgeHours, fridgeTemp, lang)} phaseKey={`poolish-${mixing}-P3`} completed={completedSteps} onToggle={toggleStep} activeTimers={activeTimers} onStartTimer={startTimer} onStopTimer={stopTimer} lang={lang} />
                     </>
                   );
                 })()
@@ -650,29 +1254,12 @@ export default function CalculatorHome() {
           ) : null}
         </View>
 
-        {/* 5. BAKING */}
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>5 · {t.calc.baking}</Text>
-          <View style={styles.ovenRow}>
-            <OvenCard active={oven === 'homeStone'} onPress={() => step(() => setOven('homeStone'))} icon="home" title={t.calc.homeStone} testID="oven-homeStone" />
-            <OvenCard active={oven === 'ooni'} onPress={() => step(() => setOven('ooni'))} icon="flame" title={t.calc.ooni} testID="oven-ooni" />
-            <OvenCard active={oven === 'homePan'} onPress={() => step(() => setOven('homePan'))} icon="restaurant" title={t.calc.homePan} testID="oven-homePan" />
-          </View>
-          <View style={styles.bakeInstructions}>
-            <View style={{ flexDirection: 'row', gap: SPACING.sm, alignItems: 'center' }}>
-              <Icon name="flame" size={16} color={COLORS.brand} />
-              <Text style={styles.bakeText}>{bakingTemp}</Text>
-            </View>
-            <Text style={styles.bakeBody}>{bakingSteps}</Text>
-          </View>
-        </View>
-
         {/* 6. RESULT - AT BOTTOM: Total FIRST, then per-pizza */}
         <View style={styles.recipeCard}>
           {dough.preferment ? (
             <>
               <Text style={styles.recipeSection}>
-                6 · {t.calc.preferment} · {method === 'biga' ? 'BIGA 50%' : 'POOLISH 35%'}
+                7 · {t.calc.preferment} · {method === 'biga' ? `BIGA ${bigaPct}%` : `POOLISH ${poolishPct}%`}
               </Text>
               <ResultRow label={t.calc.totalFlour} value={`${dough.preferment.flour} g`} highlight />
               <ResultRow label={t.calc.totalWater} value={`${dough.preferment.water} g`} highlight />
@@ -695,6 +1282,7 @@ export default function CalculatorHome() {
               )}
               <ResultRow label={t.calc.saltAmount} value={`${dough.main.salt} g`} />
               <ResultRow label={t.calc.oilAmount} value={`${dough.main.oil} g`} />
+              <ResultRow label={t.calc.yeastAmount + ' (' + t.calc.freshYeastShort + ')'} value={`${dough.main.yeast} g`} />
 
               <View style={styles.subBlock}>
                 <Text style={styles.subhead}>{t.calc.totals} · {pizzas} × {effectiveBall}g = {dough.totalDough}g</Text>
@@ -707,7 +1295,7 @@ export default function CalculatorHome() {
           ) : (
             <>
               <Text style={styles.recipeSection}>
-                6 · {t.calc.totalDough} · {pizzas} × {effectiveBall}g = {dough.totalDough}g
+                7 · {t.calc.totalDough} · {pizzas} × {effectiveBall}g = {dough.totalDough}g
               </Text>
               {isCustom ? (
                 <>
@@ -768,7 +1356,7 @@ export default function CalculatorHome() {
             <Icon name="alarm" size={16} color={COLORS.brand} />
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6, alignItems: 'center', paddingRight: 6 }}>
               {Object.entries(activeTimers).map(([key, val]) => {
-                const remaining = val.endsAt - Date.now();
+                const remaining = val.endsAt - now;
                 return (
                   <Pressable
                     key={key}
@@ -813,6 +1401,50 @@ export default function CalculatorHome() {
           </Pressable>
         </Pressable>
       </Modal>
+
+      <Modal visible={!!styleInfo} animationType="fade" transparent onRequestClose={() => setStyleInfo(null)}>
+        <Pressable style={styles.tooltipBackdrop} onPress={() => setStyleInfo(null)}>
+          <Pressable style={styles.tooltipCard} onPress={() => {}}>
+            <View style={styles.tooltipHeader}>
+              <Text style={styles.tooltipTitle}>{styleInfo ? t.calc.pizzaStyles[styleInfo].name : ''}</Text>
+              <Pressable onPress={() => setStyleInfo(null)} hitSlop={8}>
+                <Icon name="close-circle" size={22} color={COLORS.muted} />
+              </Pressable>
+            </View>
+            {styleInfo ? (
+              <ScrollView style={{ maxHeight: 460 }}>
+                <Image source={styleImages[styleInfo]} style={styles.styleInfoImage} resizeMode="cover" />
+                <Text style={styles.tooltipBody}>{t.calc.pizzaStyles[styleInfo].description}</Text>
+                <Text style={styles.styleInfoLine}>Promjer: {PIZZA_STYLE_PROFILES[styleInfo].defaultDiameter} cm</Text>
+                <Text style={styles.styleInfoLine}>Kugla: {PIZZA_STYLE_PROFILES[styleInfo].ballWeight} g</Text>
+                <Text style={styles.styleInfoLine}>Hidratacija: {PIZZA_STYLE_PROFILES[styleInfo].hydration}%</Text>
+                <Text style={styles.styleInfoLine}>Sol: {PIZZA_STYLE_PROFILES[styleInfo].saltPct}%</Text>
+                <Text style={styles.styleInfoLine}>Ulje / masti: {PIZZA_STYLE_PROFILES[styleInfo].oilPct}%</Text>
+                <Text style={styles.styleInfoLine}>Fermentacija: {PIZZA_STYLE_PROFILES[styleInfo].fermentation === 'coldLong' ? '24–48 h, hladnjak' : 'Isti dan'}</Text>
+                <Text style={styles.styleInfoLine}>Pečenje: {PIZZA_STYLE_PROFILES[styleInfo].bakeTemp} · {PIZZA_STYLE_PROFILES[styleInfo].bakeTime}</Text>
+                <Text style={styles.styleInfoLine}>Oblikovanje: {PIZZA_STYLE_PROFILES[styleInfo].shaping}</Text>
+              </ScrollView>
+            ) : null}
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      <Modal visible={!!methodInfo} animationType="fade" transparent onRequestClose={() => setMethodInfo(null)}>
+        <Pressable style={styles.tooltipBackdrop} onPress={() => setMethodInfo(null)}>
+          <Pressable style={styles.tooltipCard} onPress={() => {}}>
+            <View style={styles.tooltipHeader}>
+              <Icon name="information-circle" size={20} color={COLORS.brand} />
+              <Text style={styles.tooltipTitle}>{methodInfo ? METHOD_INFO[lang][methodInfo].title : ''}</Text>
+              <Pressable onPress={() => setMethodInfo(null)} hitSlop={8}>
+                <Icon name="close" size={20} color={COLORS.muted} />
+              </Pressable>
+            </View>
+            <ScrollView style={{ maxHeight: 460 }}>
+              <Text style={styles.tooltipBody}>{methodInfo ? METHOD_INFO[lang][methodInfo].body : ''}</Text>
+            </ScrollView>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </ImageBackground>
   );
 }
@@ -827,13 +1459,476 @@ function ResultRow({ label, value, highlight }: { label: string; value: string; 
   );
 }
 
+function getDetailedDirectSteps(
+  mixing: 'hand' | 'mixer',
+  ingredients: { flour: number; water: number; salt: number; oil: number; yeast: number },
+  totalDough: number,
+  pizzas: number,
+  ballWeight: number,
+  diameter: number,
+  fridgeHours: number,
+  oven: OvenType,
+  ovenTemp: number,
+  roomTemp: number,
+  cheesePerPizza: number,
+  biga?: { flour: number; water: number; yeast: number; remainingFlour: number; remainingWater: number; pct: number },
+  poolish?: { flour: number; water: number; yeast: number; remainingFlour: number; remainingWater: number; pct: number },
+  flourType?: FlourType,
+) {
+  const hand = mixing === 'hand';
+  const isSpelt = flourType === 'spelt';
+  const isWholeWheat = flourType === 'wholeWheat';
+  const cheeseAmount = Math.round(cheesePerPizza);
+  const initialWater = Math.round(ingredients.water * 0.9);
+  const remainingWater = Math.max(0, ingredients.water - initialWater);
+  const bigaWaterStart = biga ? Math.round(biga.remainingWater * 0.9) : 0;
+  const bigaWaterFinal = biga ? Math.max(0, biga.remainingWater - bigaWaterStart) : 0;
+  const poolishWaterStart = poolish ? Math.round(poolish.remainingWater * 0.9) : 0;
+  const poolishWaterFinal = poolish ? Math.max(0, poolish.remainingWater - poolishWaterStart) : 0;
+  const hasPreferment = !!biga || !!poolish;
+  const idealIce = roomTemp > 19
+    ? Math.min(Math.round(ingredients.water * 0.25), Math.max(0, Math.round((ingredients.water * (roomTemp - 19)) / 99)))
+    : 0;
+  const idealWater = ingredients.water - idealIce;
+  const ovenSteps = oven === 'ooni'
+    ? [`Zagrijte pizza peć najmanje 20 minuta na ${ovenTemp} °C.`, 'Stavite pizzu i rotirajte je svakih 20–30 sekundi.', 'Pecite približno 60–90 sekundi i izvadite kada rub dobije tamne mrlje.']
+    : oven === 'homePan'
+      ? [`Zagrijte kućnu pećnicu na ${ovenTemp} °C s ventilacijom.`, 'Pecite pizzu na dnu pećnice 5–7 minuta.', 'Prebacite je pod gornji grill još 2–3 minute.']
+      : [`Zagrijte kamen ili čelik 45–60 minuta na ${ovenTemp} °C.`, 'Isključite grill i prebacite pećnicu na Pizza program, ako je dostupan. Ako Pizza program nije dostupan, odaberite gornji i donji grijač bez ventilatora te postavite maksimalnu temperaturu. Pecite pizzu približno 4–5 minuta.', 'Zatim uključite grill i pecite dok rub i vrh ne dobiju željenu boju.'];
+  const bulkRestMinutes = Math.max(15, Math.round(30 * (22 / Math.max(10, roomTemp))));
+  const temperingMin = Math.min(120, Math.max(15, Math.round(30 + (22 - roomTemp) * 7.5)));
+  const temperingMax = Math.min(120, temperingMin + 15);
+  const ovenPreheatMin = oven === 'homeStone' ? 45 : 20;
+  const ovenPreheatMax = oven === 'homeStone' ? 60 : 20;
+  const temperingMidpoint = Math.round(((temperingMin + temperingMax) / 2) * 60);
+  const timer = (id: string, seconds: number, kind: BaseTimer['kind']): BaseTimer => ({ id, seconds, kind });
+  const ballCount = Math.round(totalDough / ballWeight);
+
+  return [
+    {
+      title: biga
+        ? (hand ? 'Faza B: Dodavanje Bige i ručni zamjes' : 'Faza B: Dodavanje Bige i zamjes mikserom')
+        : poolish
+          ? (hand ? 'Faza B: Dodavanje Poolisha i ručni zamjes' : 'Faza B: Dodavanje Poolisha i zamjes mikserom')
+        : (hand ? 'Faza A: Priprema i ručni zamjes' : 'Faza A: Priprema i zamjes mikserom'),
+      waterInfo: `Idealna temperatura vode je 18–20 °C. Preporučeni omjer za ovaj recept je približno ${Math.round((idealWater / ingredients.water) * 100)}% vode (${idealWater} g) i ${Math.round((idealIce / ingredients.water) * 100)}% leda (${idealIce} g). Led se računa u ukupnu količinu vode.`,
+      doughHandlingInfo: isWholeWheat
+        ? (hand
+          ? 'Integralno brašno sadrži mekinje koje brže upijaju vodu i osjetljivije su na toplinu. Koristite hladnu vodu i mijesite rukama kraće i nježno; ne pretjerujte s dodavanjem vode i ne pokušavajte razviti agresivan gluten.'
+          : 'Integralno brašno sadrži mekinje koje brže upijaju vodu i osjetljivije su na toplinu. Koristite hladnu vodu i miješajte kraće te na nižoj brzini; ne pretjerujte s dodavanjem vode i ne pokušavajte razviti agresivan gluten.')
+        : isSpelt
+          ? (hand
+            ? 'Pir ima osjetljiv gluten. Mijesite rukama lagano i kraće, približno 5 minuta; cilj je samo ujednačiti smjesu, a ne razviti pretjerano napetu strukturu.'
+            : 'Pir ima osjetljiv gluten. Miješajte na sporijoj do umjerenoj brzini i kraće, približno 5 minuta; cilj je samo ujednačiti smjesu, a ne razviti pretjerano napetu strukturu.')
+          : 'Kod visoke hidratacije tijesto može biti ljepljivo. Nemojte automatski dodavati brašno. Nauljite ili lagano smočite ruke, napravite kratki odmor, a zatim Stretch & Fold.',
+      steps: biga ? [
+        hand ? 'Operite i temeljito osušite ruke.' : 'Pripremite mikser i njegovu posudu.',
+        hand ? 'Bigu natrgajte na manje komade i ubacite je u posudu za ručni zamjes.' : 'Bigu natrgajte na manje komade i ubacite je u posudu miksera.',
+        hand ? `Dodajte ${bigaWaterStart} g vode da se Biga otpusti, pa je lagano povežite rukama.` : `Dodajte ${bigaWaterStart} g vode da se Biga otpusti, pa pokrenite mikser na sporoj brzini.`,
+        biga.remainingFlour > 0
+          ? (hand ? `Zatim dodajte preostalih ${biga.remainingFlour} g brašna i nastavite povezivati tijesto.` : `Zatim dodajte preostalih ${biga.remainingFlour} g brašna i nastavite miješati.`)
+          : 'Nema preostalog brašna; nastavite samo s vodom i Bigom.',
+        `Postupno dodajte preostalih ${bigaWaterFinal} g vode, ne sve odjednom, dok se tijesto ne poveže.`,
+        `Kada je tijesto povezano i voda gotovo upijena, dodajte ${ingredients.salt} g soli kao zaseban korak.`,
+        hand ? (isSpelt ? 'Nastavite mijesiti lagano i kraće, samo dok tijesto ne postane glatko, homogeno i povezano.' : 'Nastavite mijesiti dok tijesto ne postane glatko, elastično i povezano.') : isSpelt ? 'Nastavite miješati na sporijoj do umjerenoj brzini i kraće nego obično, samo dok tijesto ne postane glatko, homogeno i povezano.' : 'Nastavite miješati na većoj brzini dok tijesto ne razvije gluten i postane glatko, elastično i povezano.',
+        ...(ingredients.oil > 0 ? [hand ? `Dodajte ${ingredients.oil} g maslinovog ulja i mijesite dok ga tijesto potpuno ne upije.` : `Dodajte ${ingredients.oil} g maslinovog ulja i miješajte dok ga tijesto potpuno ne upije.`] : []),
+        'Zamjes je gotov kada je tijesto glatko, elastično i homogeno.',
+        hand ? 'Ostavite tijesto da odmori 5–6 minuta.' : 'Ostavite tijesto da odmori 5–6 minuta u posudi miksera.',
+      ] : poolish ? [
+        hand ? 'Operite i temeljito osušite ruke.' : 'Pripremite mikser i njegovu posudu.',
+        hand ? 'Hladni Poolish prelijte u posudu za ručni zamjes.' : 'Hladni Poolish prelijte u posudu miksera.',
+        poolish.remainingFlour > 0
+          ? (hand ? `Dodajte preostalih ${poolish.remainingFlour} g brašna i lagano povežite Poolish s brašnom.` : `Dodajte preostalih ${poolish.remainingFlour} g brašna i pokrenite mikser na sporoj brzini.`)
+          : 'Nema preostalog brašna; nastavite samo s Poolishom i vodom.',
+        hand ? `Dodajte ${poolishWaterStart} g preostale vode i nastavite povezivati tijesto.` : `Dodajte ${poolishWaterStart} g preostale vode i nastavite miješati.`,
+        poolishWaterFinal > 0 ? `Postupno dodajte preostalih ${poolishWaterFinal} g vode, ne sve odjednom.` : 'Preostala voda je dodana u prethodnom koraku.',
+        `Kada je tijesto povezano, dodajte ${ingredients.salt} g soli kao zaseban korak.`,
+        hand ? (isSpelt ? 'Nastavite mijesiti lagano i kraće, samo dok tijesto ne postane glatko, homogeno i povezano.' : 'Nastavite mijesiti dok tijesto ne postane glatko, elastično i povezano.') : isSpelt ? 'Nastavite miješati na sporijoj do umjerenoj brzini i kraće nego obično, samo dok tijesto ne postane glatko, homogeno i povezano.' : 'Nastavite miješati na većoj brzini dok tijesto ne razvije gluten i postane glatko, elastično i povezano.',
+        ...(ingredients.oil > 0 ? [hand ? `Dodajte ${ingredients.oil} g maslinovog ulja i mijesite dok ga tijesto potpuno ne upije.` : `Dodajte ${ingredients.oil} g maslinovog ulja i miješajte dok ga tijesto potpuno ne upije.`] : []),
+        'Zamjes je gotov kada je tijesto glatko, elastično i homogeno.',
+        hand ? 'Ostavite tijesto da odmori 5–6 minuta.' : 'Ostavite tijesto da odmori 5–6 minuta u posudi miksera.',
+      ] : [
+        hand ? 'Operite i temeljito osušite ruke.' : 'Pripremite mikser i njegovu posudu.',
+        `Prosijte i precizno izmjerite ${ingredients.flour} g ${isSpelt ? 'pirovog ' : ''}brašna, ${ingredients.salt} g soli, ${ingredients.yeast} g svježeg kvasca i ukupno ${ingredients.water} g ${isSpelt ? 'hladne ' : ''}vode.`,
+        `U približno 90% ${isSpelt ? 'hladne ' : ''}vode, odnosno ${initialWater} g, otopite kvasac.`,
+        hand ? 'Postupno dodajte brašno u vodu s kvascem i miješajte rukom dok ne nestanu suhi dijelovi.' : 'Dodajte brašno u posudu miksera i miješajte na sporoj brzini dok ne nestanu suhi dijelovi.',
+        `Postupno dodajte preostalih ${remainingWater} g ${isSpelt ? 'hladne ' : ''}vode, ne odjednom.`,
+        `Kada je tijesto povezano i voda gotovo upijena, dodajte ${ingredients.salt} g soli kao zaseban korak.`,
+        hand ? (isSpelt ? 'Nastavite mijesiti lagano i kraće, samo dok tijesto ne postane glatko, homogeno i povezano.' : 'Nastavite mijesiti dok tijesto ne postane glatko, elastično i povezano.') : isSpelt ? 'Nastavite miješati na sporijoj do umjerenoj brzini i kraće nego obično, samo dok tijesto ne postane glatko, homogeno i povezano.' : 'Nastavite miješati na većoj brzini dok tijesto ne razvije gluten i postane glatko, elastično i povezano.',
+        ...(ingredients.oil > 0 ? [hand ? `Dodajte ${ingredients.oil} g maslinovog ulja i mijesite dok ga tijesto potpuno ne upije.` : `Dodajte ${ingredients.oil} g maslinovog ulja i miješajte dok ga tijesto potpuno ne upije.`] : []),
+        'Zamjes je gotov kada je tijesto glatko, elastično i homogeno.',
+        hand ? 'Ostavite tijesto da odmori 5–6 minuta.' : 'Ostavite tijesto da odmori 5–6 minuta u posudi miksera.',
+      ],
+      timers: [timer('post-mix-rest', 5 * 60, 'rest')],
+    },
+    {
+      title: hasPreferment ? 'Faza C: Bulk fermentacija i foldovi' : 'Faza B: Bulk fermentacija i foldovi',
+      fermentationInfo: isWholeWheat
+        ? `Integralno tijesto ima slabiju elastičnost i lakše se lomi, pa budite vrlo nježni sa Stretch & Fold. Ponavljajte je ukupno 3 puta svakih približno ${bulkRestMinutes} minuta, bez agresivnih pokreta.`
+        : isSpelt
+          ? `Pir fermentira nježnije. Radite vrlo nježan Stretch & Fold i ponovite ga ukupno 3 puta svakih približno ${bulkRestMinutes} minuta; tijesto se lako trga.`
+          : `Temperatura prostorije utječe na brzinu fermentacije. Ljeti, kada je prostorija toplija, bulk se skraćuje; zimi, kada je hladnija, bulk se produžuje. Za unesenu temperaturu od ${roomTemp} °C aplikacija je prilagodila odmor na približno ${bulkRestMinutes} minuta.`,
+      fermentationSignsInfo: 'Provjerite znakove aktivne fermentacije: sitne mjehuriće, blago povećanje volumena, glađu i napetiju površinu te elastičniju i prozračniju strukturu tijesta.',
+      containerOilInfo: 'Koristite čistu posudu sigurnu za hranu koja je dovoljno velika da tijesto naraste. Posudu pokrijte poklopcem ili folijom, ali je nemojte hermetički zatvoriti: fermentacija stvara plinove i posuda ne smije biti pod pritiskom. Možete uzeti plastičnu posudu s poklopcem, staklenu zdjelu s folijom, posudu za tijesto ili fermentacijsku kutiju s poklopcem koji nije potpuno zrakonepropusan. Posudu samo lagano premažite pomoćnim uljem; to ulje ne ulazi u izračun recepta i nije isto što i ulje u tijestu.',
+      steps: [
+        'Lagano nauljite fermentacijsku posudu i prebacite tijesto u nju.',
+        `Pokrijte posudu i ostavite tijesto ${bulkRestMinutes} minuta na sobnoj temperaturi.`,
+        'Napravite prvi Stretch & Fold.',
+        `Ostavite tijesto ponovno ${bulkRestMinutes} minuta.`,
+        'Napravite drugi Stretch & Fold.',
+        `Ostavite završni bulk još ${bulkRestMinutes} minuta na sobnoj temperaturi.`,
+        'Provjerite jesu li vidljivi prvi znakovi fermentacije.',
+      ],
+      timers: [
+        timer('bulk-rest-1', bulkRestMinutes * 60, 'rt'),
+        timer('bulk-rest-2', bulkRestMinutes * 60, 'rt'),
+        timer('bulk-final', bulkRestMinutes * 60, 'rt'),
+      ],
+    },
+    {
+      title: hasPreferment ? 'Faza D: Podjela i kugle' : 'Faza C: Podjela i kugle',
+      degassingInfo: 'Degaziranje znači izbacivanje plinova iz tijesta nastalih tijekom fermentacije.',
+      steps: [
+        'Lagano pospite radnu površinu brašnom. Brašno za radnu površinu ne ulazi u izračun recepta.',
+        'Nježno izvadite tijesto iz posude uz minimalno degaziranje.',
+        `Podijelite ukupno ${totalDough} g tijesta na kugle od ${ballWeight} g.`,
+        `Dobit ćete približno ${ballCount} kugli za ${pizzas} pizza.`,
+        'Svaki komad oblikujte u glatku i zategnutu kuglu.',
+      ],
+    },
+    {
+      title: hasPreferment ? 'Faza E: Hladna fermentacija' : 'Faza D: Hladna fermentacija',
+      temperingInfo: isWholeWheat
+        ? 'Integralno tijesto ne podnosi pretjerano proširenje i ne voli duže zadržavanje u hladnjaku. Nakon hladne fermentacije kugle ostavite samo dovoljno dugo da se opuste, bez predizanja i bez agresivnog razvlačenja.'
+        : isSpelt
+          ? 'Pir je osjetljiviji i ne podnosi prekoračenje vremena u hladnjaku. Nakon hladne fermentacije kugle ostavite samo dovoljno dugo da se opuste, bez predizanja.'
+          : 'Temperiranje znači da nakon hladne fermentacije izvadite kuglice tijesta iz hladnjaka i ostavite ih neko vrijeme na sobnoj temperaturi prije razvlačenja i pečenja.',
+      containerOilInfo: 'Kugle držite u kutiji koja štiti od isušivanja, ali je nemojte hermetički zatvoriti. Poklopac treba samo prianjati ili imati mogućnost izlaska plinova; kutija ne smije biti pod pritiskom.',
+      steps: [
+        'Stavite kugle u zatvorenu fermentacijsku kutiju i prebacite ih u hladnjak.',
+        `Kugle fermentiraju u hladnjaku ${fridgeHours} sati pri približno 4–6 °C. Vrijeme hladne fermentacije računa se samo jednom.`,
+        'Nakon isteka odabranog vremena prijeđite na temperiranje.',
+      ],
+      timers: [timer('cold-fermentation', fridgeHours * 3600, 'fridge')],
+    },
+    {
+      title: hasPreferment ? 'Faza F: Temperiranje i oblikovanje' : 'Faza E: Temperiranje i oblikovanje',
+      temperingInfo: `Vrijeme temperiranja automatski se prilagođava temperaturi prostorije od ${roomTemp} °C: približno ${temperingMin}–${temperingMax} minuta. Na hladnijoj temperaturi može trebati 1–2 sata. Pazite da se kugle ne predignu.`,
+      proofingInfo: isWholeWheat
+        ? 'Kod integralnog tijesta vrhovima prstiju vrlo nježno pritisnite centar. Brzo istiskivanje zraka može dovesti do pucanja gornjeg sloja, a rub neće imati visok, šupljikav cornicione kao bijelo brašno.'
+        : isSpelt
+          ? 'Kod pira vrhovima prstiju vrlo nježno pritisnite centar. Pir ima manje elastičnosti, zato izbjegavajte naglo istiskivanje zraka; rub se možda neće jako napuhnuti.'
+          : 'Provjerite je li tijesto spremno za oblikovanje: kugla treba biti mekana, podatna i lagano napuhnuta. Lagano pritisnite površinu prstom; tijesto se treba polako vraćati. Ako je još vrlo čvrsto i brzo vraća oblik, ostavite ga još malo na sobnoj temperaturi.',
+      ovenTimingInfo: oven === 'ooni'
+        ? `Pizza peći treba približno ${ovenPreheatMin}–${ovenPreheatMax} minuta da se zagrije. Da se vrijeme uskladi s temperiranjem kugli, uključite pizza peć ${Math.max(0, ovenPreheatMin - temperingMax)}–${Math.max(0, ovenPreheatMax - temperingMin)} minuta prije nego što izvadite kugle iz hladnjaka.`
+        : `Pećnici treba približno ${ovenPreheatMin}–${ovenPreheatMax} minuta da se zagrije. Da se vrijeme uskladi s temperiranjem kugli, uključite pećnicu ${Math.max(0, ovenPreheatMin - temperingMax)}–${Math.max(0, ovenPreheatMax - temperingMin)} minuta prije nego što izvadite kugle iz hladnjaka.`,
+      bakingInfo: oven === 'homeStone' ? 'Kamen ili čelik postavite dvije rešetke ispod gornjeg grijača.' : undefined,
+      bakingCheckInfo: oven === 'homePan' ? 'Podignite rub pizze i provjerite je li dno dovoljno pečeno i zlatno-smeđe.' : undefined,
+      steps: oven === 'homePan' ? [
+        `Izvadite kugle iz hladnjaka i ostavite ih ${temperingMin}–${temperingMax} minuta prije oblikovanja. Pazite da se kugle ne predignu.`,
+        'Brzim i nježnim pokretom izvadite kuglu iz posude i stavite je naopako na semolu.',
+        'Lagano nauljite tepsiju.',
+        `Stavite oblikovano tijesto direktno u tepsiju i razvucite ga do ciljnog promjera od ${diameter} cm.`,
+        'Lagano ga prstima raširite prema rubovima. Nemojte jako pritiskati da ne izbacite sav zrak.',
+        'Ostavite tijesto u tepsiji da se kratko opusti i prilagodi obliku ako se vraća natrag.',
+        'Dodajte umak i nadjev.',
+        'Pećnicu dobro zagrijte na maksimalnu temperaturu.',
+        'Ako imate Pizza program, koristite njega; ako nemate Pizza program, koristite gornji i donji grijač bez ventilatora.',
+        'Pecite bez grilla dok se dno i rub dobro ne ispeku.',
+        'Na kraju uključite grill ako želite jače zapečenu gornju stranu.',
+        'Izvadite pizzu iz pećnice i ostavite je kratko prije rezanja.',
+      ] : [
+        ovenSteps[0],
+        `Izvadite kugle iz hladnjaka i ostavite ih ${temperingMin}–${temperingMax} minuta prije oblikovanja. Pazite da se kugle ne predignu.`,
+        'Površinu lagano pospite minimalnom količinom semole.',
+        'Brzim i nježnim pokretom izvadite kuglu iz posude i stavite je naopako na semolu.',
+        'Vrhovima prstiju potiskujte zrak iz sredine prema rubovima. Ne koristite valjak.',
+        'Ostavite cornicione približno 1–2 cm kao vizualnu preporuku.',
+        `Razvucite tijesto do ciljnog promjera od ${diameter} cm.`,
+        'Otresite višak semole i prebacite tijesto na lopaticu.',
+        'Dodajte nadjev prema promjeru pizze, a rub ostavite bez nadjeva.',
+        `Za pizzu od ${diameter} cm zadana količina mozzarelle je približno ${cheeseAmount} g.`,
+        'Ubacite pizzu u zagrijanu pećnicu.',
+        ovenSteps[1],
+        ovenSteps[2],
+      ],
+      timers: [timer('tempering', temperingMidpoint, 'preBake')],
+    },
+  ];
+}
+
+function getDetailedDirectStepsLocalized(
+  lang: 'de' | 'en' | 'sl',
+  ingredients: { flour: number; water: number; salt: number; oil: number; yeast: number },
+  totalDough: number,
+  pizzas: number,
+  ballWeight: number,
+  diameter: number,
+  fridgeHours: number,
+  roomTemp: number,
+  cheesePerPizza: number,
+  oven: OvenType,
+  ovenTemp: number,
+  mixing: 'hand' | 'mixer',
+) {
+  const hand = mixing === 'hand';
+  const initialWater = Math.round(ingredients.water * 0.9);
+  const remainingWater = Math.max(0, ingredients.water - initialWater);
+  const idealIce = roomTemp > 19
+    ? Math.min(Math.round(ingredients.water * 0.25), Math.max(0, Math.round((ingredients.water * (roomTemp - 19)) / 99)))
+    : 0;
+  const idealWater = ingredients.water - idealIce;
+  const bulkRestMinutes = Math.max(15, Math.round(30 * (22 / Math.max(10, roomTemp))));
+  const temperingMin = Math.min(120, Math.max(15, Math.round(30 + (22 - roomTemp) * 7.5)));
+  const temperingMax = Math.min(120, temperingMin + 15);
+  const ovenPreheatMin = oven === 'homeStone' ? 45 : 20;
+  const ovenPreheatMax = oven === 'homeStone' ? 60 : 20;
+  const temperingMidpoint = Math.round(((temperingMin + temperingMax) / 2) * 60);
+  const cheeseAmount = Math.round(cheesePerPizza);
+  const ballCount = Math.round(totalDough / ballWeight);
+  const timer = (id: string, seconds: number, kind: BaseTimer['kind']): BaseTimer => ({ id, seconds, kind });
+  const pick = (de: string, en: string, sl: string) => lang === 'de' ? de : lang === 'en' ? en : sl;
+  const ovenSteps = oven === 'ooni'
+    ? [
+      pick(`Heizen Sie den Pizzaofen mindestens 20 Minuten auf ${ovenTemp} °C vor.`, `Preheat the pizza oven for at least 20 minutes at ${ovenTemp} °C.`, `Pizza pečico segrevajte vsaj 20 minut pri ${ovenTemp} °C.`),
+      pick('Schieben Sie die Pizza hinein und drehen Sie sie alle 20–30 Sekunden.', 'Launch the pizza and rotate it every 20–30 seconds.', 'Vstavite pico in jo obračajte vsakih 20–30 sekund.'),
+      pick('Backen Sie die Pizza etwa 60–90 Sekunden und nehmen Sie sie heraus, sobald der Rand dunkle Flecken bekommt.', 'Bake the pizza for approximately 60–90 seconds and remove it when the rim develops dark spots.', 'Pico pecite približno 60–90 sekund in jo vzemite iz pečice, ko rob dobi temne lise.'),
+    ]
+    : oven === 'homePan'
+      ? [
+        pick(`Heizen Sie den Haushaltsbackofen auf ${ovenTemp} °C mit Umluft vor.`, `Preheat the home oven to ${ovenTemp} °C with convection.`, `Domačo pečico segrejte na ${ovenTemp} °C z ventilacijo.`),
+        pick('Backen Sie die Pizza auf der untersten Schiene des Ofens 5–7 Minuten.', 'Bake the pizza on the bottom of the oven for 5–7 minutes.', 'Pico pecite na dnu pečice 5–7 minut.'),
+        pick('Schieben Sie die Pizza anschließend für weitere 2–3 Minuten unter den oberen Grill.', 'Then move the pizza under the upper grill for another 2–3 minutes.', 'Nato pico za nadaljnji 2–3 minuti prestavite pod zgornji žar.'),
+      ] : [
+      pick(`Heizen Sie den Pizzastein oder Pizzastahl 45–60 Minuten auf ${ovenTemp} °C vor.`, `Preheat the pizza stone or steel for 45–60 minutes at ${ovenTemp} °C.`, `Kamen ali jeklo za pico segrevajte 45–60 minut pri ${ovenTemp} °C.`),
+      pick('Schalten Sie den Grill aus und wechseln Sie auf das Pizza-Programm, falls vorhanden. Wenn kein Pizza-Programm verfügbar ist, wählen Sie Ober-/Unterhitze ohne Umluft und stellen Sie die maximale Temperatur ein. Backen Sie die Pizza ungefähr 4–5 Minuten.', 'Turn off the grill and switch the oven to the Pizza program, if available. If no Pizza program is available, select top and bottom heat without a fan and set the oven to its maximum temperature. Bake the pizza for approximately 4–5 minutes.', 'Izklopite žar in preklopite pečico na program Pizza, če je na voljo. Če program Pizza ni na voljo, izberite zgornje in spodnje gretje brez ventilatorja ter nastavite najvišjo temperaturo. Pico pecite približno 4–5 minut.'),
+      pick('Schalten Sie anschließend den Grill ein und backen Sie die Pizza weiter, bis Rand und Oberfläche die gewünschte Bräunung erreicht haben.', 'Then turn on the grill and continue baking until the rim and top reach the desired browning.', 'Nato vklopite žar in pecite, dokler rob in vrh ne dosežeta želene zapečenosti.'),
+    ];
+
+  return [
+    {
+      title: hand
+        ? pick('Phase A: Vorbereitung und Handmischung', 'Phase A: Preparation and Hand Mixing', 'Faza A: Priprava in ročno mešanje')
+        : pick('Phase A: Vorbereitung und Mischen mit dem Mixer', 'Phase A: Preparation and Mixer Mixing', 'Faza A: Priprava in mešanje z mešalnikom'),
+      waterInfo: pick(
+        `Die ideale Wassertemperatur beträgt 18–20 °C. Das empfohlene Verhältnis für dieses Rezept beträgt ungefähr ${Math.round((idealWater / ingredients.water) * 100)}% Wasser (${idealWater} g) und ${Math.round((idealIce / ingredients.water) * 100)}% Eis (${idealIce} g). Das Eis wird zur Gesamtwassermenge gerechnet.`,
+        `The ideal water temperature is 18–20 °C. The recommended ratio for this recipe is approximately ${Math.round((idealWater / ingredients.water) * 100)}% water (${idealWater} g) and ${Math.round((idealIce / ingredients.water) * 100)}% ice (${idealIce} g). Ice is included in the total water amount.`,
+        `Idealna temperatura vode je 18–20 °C. Priporočeno razmerje za ta recept je približno ${Math.round((idealWater / ingredients.water) * 100)}% vode (${idealWater} g) in ${Math.round((idealIce / ingredients.water) * 100)}% ledu (${idealIce} g). Led se všteva v skupno količino vode.`,
+      ),
+      doughHandlingInfo: pick(
+        'Bei hoher Hydration kann der Teig klebrig sein. Nicht automatisch Mehl hinzufügen. Ölen oder befeuchten Sie Ihre Hände leicht, lassen Sie den Teig kurz ruhen und führen Sie anschließend ein Stretch & Fold durch.',
+        'With high hydration, the dough may be sticky. Do not automatically add flour. Lightly oil or wet your hands, let the dough rest briefly, and then perform a Stretch & Fold.',
+        'Pri visoki hidraciji je lahko testo lepljivo. Ne dodajajte samodejno moke. Roke rahlo naoljite ali navlažite, testo pustite kratek čas počivati, nato izvedite Stretch & Fold.',
+      ),
+      steps: [
+        hand
+          ? pick('Waschen und trocknen Sie Ihre Hände gründlich.', 'Wash and thoroughly dry your hands.', 'Umijte in temeljito osušite roke.')
+          : pick('Bereiten Sie den Mixer und seine Schüssel vor.', 'Prepare the mixer and its bowl.', 'Pripravite mešalnik in njegovo posodo.'),
+        pick(`Sieben und wiegen Sie genau ${ingredients.flour} g Mehl, ${ingredients.salt} g Salz, ${ingredients.yeast} g Frischhefe und insgesamt ${ingredients.water} g Wasser ab.`, `Sift and accurately measure ${ingredients.flour} g of flour, ${ingredients.salt} g of salt, ${ingredients.yeast} g of fresh yeast, and ${ingredients.water} g of total water.`, `Presejte in natančno odmerite ${ingredients.flour} g moke, ${ingredients.salt} g soli, ${ingredients.yeast} g svežega kvasa in skupno ${ingredients.water} g vode.`),
+        pick(`Lösen Sie die Hefe in ungefähr 90 % des Wassers, also ${initialWater} g, auf.`, `Dissolve the yeast in approximately 90% of the water, or ${initialWater} g.`, `Kvas raztopite v približno 90 % vode oziroma v ${initialWater} g vode.`),
+        hand
+          ? pick('Geben Sie das Mehl nach und nach zum Wasser mit der Hefe und mischen Sie es mit der Hand, bis keine trockenen Stellen mehr vorhanden sind.', 'Gradually add the flour to the water and yeast mixture and mix by hand until no dry flour remains.', 'Postopoma dodajajte moko v vodo s kvasom in mešajte z roko, dokler ne izginejo suhi deli.')
+          : pick('Geben Sie das Mehl in die Mixerschüssel und mischen Sie bei niedriger Geschwindigkeit, bis keine trockenen Stellen mehr vorhanden sind.', 'Add the flour to the mixer bowl and mix on low speed until no dry flour remains.', 'Moko dodajte v posodo mešalnika in mešajte pri nizki hitrosti, dokler ne izginejo suhi deli.'),
+        pick(`Geben Sie die restlichen ${remainingWater} g Wasser nach und nach hinzu, nicht auf einmal.`, `Gradually add the remaining ${remainingWater} g of water, not all at once.`, `Postopoma dodajte preostalih ${remainingWater} g vode, ne vse naenkrat.`),
+        pick(`Wenn der Teig verbunden ist und das Wasser fast vollständig aufgenommen wurde, geben Sie ${ingredients.salt} g Salz als separaten Schritt hinzu.`, `When the dough has come together and the water is almost fully absorbed, add ${ingredients.salt} g of salt as a separate step.`, `Ko je testo povezano in je voda skoraj v celoti vpita, dodajte ${ingredients.salt} g soli kot ločen korak.`),
+        hand
+          ? pick('Kneten Sie weiter, bis der Teig glatt, elastisch und gut verbunden ist.', 'Continue kneading until the dough becomes smooth, elastic, and well connected.', 'Nadaljujte z gnetenjem, dokler testo ne postane gladko, elastično in povezano.')
+          : pick('Mischen Sie bei höherer Geschwindigkeit weiter, bis sich Gluten entwickelt und der Teig glatt, elastisch und gut verbunden ist.', 'Continue mixing at a higher speed until gluten develops and the dough becomes smooth, elastic, and well connected.', 'Nadaljujte z mešanjem pri višji hitrosti, dokler se ne razvije gluten in testo postane gladko, elastično in povezano.'),
+        ...(ingredients.oil > 0 ? [hand
+          ? pick(`Geben Sie ${ingredients.oil} g Olivenöl hinzu und kneten Sie, bis der Teig das Öl vollständig aufgenommen hat.`, `If oil is used: Add ${ingredients.oil} g of olive oil and knead until the dough has fully absorbed it.`, `Če uporabljate olje: Dodajte ${ingredients.oil} g oljčnega olja in gnetite, dokler ga testo popolnoma ne vpije.`)
+          : pick(`Geben Sie ${ingredients.oil} g Olivenöl hinzu und mischen Sie, bis der Teig das Öl vollständig aufgenommen hat.`, `If oil is used: Add ${ingredients.oil} g of olive oil and mix until the dough has fully absorbed it.`, `Če uporabljate olje: Dodajte ${ingredients.oil} g oljčnega olja in mešajte, dokler ga testo popolnoma ne vpije.`)] : []),
+        pick('Der Teig ist fertig geknetet, wenn er glatt, elastisch und homogen ist.', 'The dough is fully mixed when it is smooth, elastic, and homogeneous.', 'Gnetenje je končano, ko je testo gladko, elastično in homogeno.'),
+        hand
+          ? pick('Lassen Sie den Teig 5–6 Minuten ruhen.', 'Let the dough rest for 5–6 minutes.', 'Testo pustite počivati 5–6 minut.')
+          : pick('Lassen Sie den Teig 5–6 Minuten in der Mixerschüssel ruhen.', 'Let the dough rest for 5–6 minutes in the mixer bowl.', 'Testo pustite počivati 5–6 minut v posodi mešalnika.'),
+      ],
+      timers: [timer('post-mix-rest', 5 * 60, 'rest')],
+    },
+    {
+      title: pick('Phase B: Stockgare und Stretch & Fold', 'Phase B: Bulk Fermentation and Folds', 'Faza B: Prva fermentacija in pregibi'),
+      fermentationInfo: pick(`Die Raumtemperatur beeinflusst die Geschwindigkeit der Fermentation. Im Sommer, wenn der Raum wärmer ist, wird die Stockgare verkürzt; im Winter, wenn es kühler ist, wird sie verlängert. Für die eingegebene Raumtemperatur von ${roomTemp} °C hat die App die Ruhezeit auf ungefähr ${bulkRestMinutes} Minuten angepasst.`, `Room temperature affects the speed of fermentation. In summer, when the room is warmer, bulk fermentation is shortened; in winter, when it is cooler, it is extended. For the entered room temperature of ${roomTemp} °C, the app has adjusted the resting time to approximately ${bulkRestMinutes} minutes.`, `Sobna temperatura vpliva na hitrost fermentacije. Poleti, ko je prostor toplejši, se prva fermentacija skrajša; pozimi, ko je hladneje, se podaljša. Za vneseno sobno temperaturo ${roomTemp} °C je aplikacija čas počitka prilagodila na približno ${bulkRestMinutes} minut.`),
+      fermentationSignsInfo: pick('Achten Sie auf Anzeichen einer aktiven Fermentation: kleine Bläschen, eine leichte Volumenzunahme, eine glattere und leicht gespannte Oberfläche sowie eine elastischere und luftigere Teigstruktur.', 'Check for signs of active fermentation: small bubbles, a slight increase in volume, a smoother and slightly taut surface, and a more elastic and airy dough structure.', 'Preverite znake aktivne fermentacije: majhne mehurčke, rahlo povečanje prostornine, bolj gladko in rahlo napeto površino ter bolj elastično in zračno strukturo testa.'),
+      containerOilInfo: pick('Verwenden Sie einen sauberen, lebensmittelechten Behälter, der groß genug ist, damit der Teig aufgehen kann. Decken Sie den Behälter mit einem Deckel oder einer Folie ab, verschließen Sie ihn jedoch nicht luftdicht: Bei der Fermentation entstehen Gase und der Behälter darf nicht unter Druck stehen. Sie können eine Kunststoffbox mit Deckel, eine Glasschüssel mit Folie, eine Teigwanne oder eine Gärbox mit nicht vollständig luftdichtem Deckel verwenden. Bestreichen Sie den Behälter nur leicht mit etwas Hilfsöl. Dieses Öl wird nicht in die Rezeptberechnung einbezogen und ist nicht dasselbe Öl wie das Öl im Teig.', 'Use a clean, food-safe container that is large enough for the dough to rise. Cover the container with a lid or plastic wrap, but do not seal it airtight: fermentation produces gases, and the container must not become pressurized. You can use a plastic container with a lid, a glass bowl covered with plastic wrap, a dough tub, or a fermentation box with a lid that is not completely airtight. Lightly coat the container with a small amount of auxiliary oil. This oil is not included in the recipe calculation and is not the same as the oil in the dough.', 'Uporabite čisto posodo, primerno za stik z živili, ki je dovolj velika, da lahko testo vzhaja. Posodo pokrijte s pokrovom ali folijo, vendar je ne zaprite nepredušno: pri fermentaciji nastajajo plini in posoda ne sme biti pod pritiskom. Uporabite lahko plastično posodo s pokrovom, stekleno skledo s folijo, posodo za testo ali fermentacijsko posodo s pokrovom, ki ni popolnoma neprepusten. Posodo rahlo premažite s pomožnim oljem. To olje ni vključeno v izračun recepta in ni isto kot olje v testu.'),
+      steps: [
+        pick('Ölen Sie den Fermentationsbehälter leicht und geben Sie den Teig hinein.', 'Lightly oil the fermentation container and transfer the dough into it.', 'Fermentacijsko posodo rahlo naoljite in vanjo prenesite testo.'),
+        pick(`Decken Sie den Behälter ab und lassen Sie den Teig ${bulkRestMinutes} Minuten bei Raumtemperatur ruhen.`, `Cover the container and let the dough rest for ${bulkRestMinutes} minutes at room temperature.`, `Posodo pokrijte in testo pustite ${bulkRestMinutes} minut počivati pri sobni temperaturi.`),
+        pick('Führen Sie das erste Stretch & Fold durch.', 'Perform the first Stretch & Fold.', 'Izvedite prvi Stretch & Fold.'),
+        pick(`Lassen Sie den Teig erneut ${bulkRestMinutes} Minuten ruhen.`, `Let the dough rest for another ${bulkRestMinutes} minutes.`, `Testo ponovno pustite počivati ${bulkRestMinutes} minut.`),
+        pick('Führen Sie das zweite Stretch & Fold durch.', 'Perform the second Stretch & Fold.', 'Izvedite drugi Stretch & Fold.'),
+        pick(`Lassen Sie die abschließende Stockgare weitere ${bulkRestMinutes} Minuten bei Raumtemperatur laufen.`, `Let the dough complete its final bulk fermentation for another ${bulkRestMinutes} minutes at room temperature.`, `Končno prvo fermentacijo pustite potekati še ${bulkRestMinutes} minut pri sobni temperaturi.`),
+        pick('Prüfen Sie, ob erste Anzeichen der Fermentation sichtbar sind.', 'Check whether the first signs of fermentation are visible.', 'Preverite, ali so vidni prvi znaki fermentacije.'),
+      ],
+      timers: [timer('bulk-rest-1', bulkRestMinutes * 60, 'rt'), timer('bulk-rest-2', bulkRestMinutes * 60, 'rt'), timer('bulk-final', bulkRestMinutes * 60, 'rt')],
+    },
+    {
+      title: pick('Phase C: Teilen und Ballen', 'Phase C: Dividing and Balling', 'Faza C: Delitev in oblikovanje kroglic'),
+      degassingInfo: pick('Entgasen bedeutet, die während der Fermentation entstandenen Gase aus dem Teig zu entfernen.', 'Degassing means removing the gases produced in the dough during fermentation.', 'Degaziranje pomeni odstranjevanje plinov, ki so nastali v testu med fermentacijo.'),
+      steps: [
+        pick('Bestäuben Sie die Arbeitsfläche leicht mit Mehl. Das Mehl für die Arbeitsfläche wird nicht in die Rezeptberechnung einbezogen.', 'Lightly flour the work surface. Flour used for the work surface is not included in the recipe calculation.', 'Delovno površino rahlo posujte z moko. Moka za delovno površino ni vključena v izračun recepta.'),
+        pick('Nehmen Sie den Teig vorsichtig aus dem Behälter und vermeiden Sie dabei möglichst starkes Entgasen.', 'Gently remove the dough from the container while minimizing degassing.', 'Testo nežno vzemite iz posode in pri tem čim manj iztisnite plin.'),
+        pick(`Teilen Sie insgesamt ${totalDough} g Teig in Teiglinge mit jeweils ${ballWeight} g.`, `Divide a total of ${totalDough} g of dough into balls weighing ${ballWeight} g each.`, `Skupno ${totalDough} g testa razdelite na kroglice po ${ballWeight} g.`),
+        pick(`Sie erhalten ungefähr ${ballCount} Teiglinge für ${pizzas} Pizzen.`, `You will get approximately ${ballCount} dough balls for ${pizzas} pizzas.`, `Dobili boste približno ${ballCount} kroglic za ${pizzas} pic.`),
+        pick('Formen Sie jedes Stück zu einer glatten und gespannten Teigkugel.', 'Shape each piece into a smooth and tight dough ball.', 'Vsak kos oblikujte v gladko in napeto kroglico.'),
+      ],
+    },
+    {
+      title: pick('Phase D: Kalte Fermentation', 'Phase D: Cold Fermentation', 'Faza D: Hladna fermentacija'),
+      temperingInfo: pick('Temperieren bedeutet, dass die Teigkugeln nach der kalten Fermentation aus dem Kühlschrank genommen und vor dem Ausformen und Backen einige Zeit bei Raumtemperatur stehen gelassen werden.', 'Tempering means taking the dough balls out of the refrigerator after cold fermentation and leaving them at room temperature for some time before stretching and baking.', 'Temperiranje pomeni, da po hladni fermentaciji kroglice testa vzamete iz hladilnika in jih pred raztezanjem in peko nekaj časa pustite na sobni temperaturi.'),
+      containerOilInfo: pick('Bewahren Sie die Teigkugeln in einer Box auf, die sie vor dem Austrocknen schützt, aber nicht luftdicht verschlossen ist. Der Deckel sollte nur aufliegen oder eine Möglichkeit zum Druckausgleich bieten. Die Box darf nicht unter Druck stehen.', 'Keep the dough balls in a box that protects them from drying out but is not sealed airtight. The lid should simply rest on the box or allow pressure to escape. The box must not become pressurized.', 'Kroglice testa hranite v posodi, ki jih ščiti pred izsušitvijo, vendar ni nepredušno zaprta. Pokrov naj bo samo položen na posodo ali naj omogoča izhod plinov. Posoda ne sme biti pod pritiskom.'),
+      steps: [
+        pick('Legen Sie die Teigkugeln in eine verschlossene Teigbox und stellen Sie sie in den Kühlschrank.', 'Place the dough balls in a closed fermentation box and transfer them to the refrigerator.', 'Kroglice testa položite v zaprto fermentacijsko posodo in jih prestavite v hladilnik.'),
+        pick(`Lassen Sie die Teigkugeln ${fridgeHours} Stunden bei ungefähr 4–6 °C im Kühlschrank fermentieren. Die Zeit der kalten Fermentation wird nur einmal berechnet.`, `Ferment the dough balls in the refrigerator for ${fridgeHours} hours at approximately 4–6 °C. Cold fermentation time is counted only once.`, `Kroglice naj fermentirajo v hladilniku ${fridgeHours} ur pri približno 4–6 °C. Čas hladne fermentacije se šteje samo enkrat.`),
+        pick('Nach Ablauf der gewählten Zeit fahren Sie mit dem Temperieren fort.', 'After the selected time has elapsed, proceed to tempering.', 'Po poteku izbranega časa nadaljujte s temperiranjem.'),
+      ],
+      timers: [timer('cold-fermentation', fridgeHours * 3600, 'fridge')],
+    },
+    {
+      title: pick('Phase E: Temperieren und Formen', 'Phase E: Tempering and Shaping', 'Faza E: Temperiranje in oblikovanje'),
+      temperingInfo: pick(`Die Temperierzeit wird automatisch an die Raumtemperatur von ${roomTemp} °C angepasst: ungefähr ${temperingMin}–${temperingMax} Minuten. Bei niedrigeren Temperaturen kann es 1–2 Stunden dauern. Achten Sie darauf, dass die Teigkugeln nicht überfermentieren.`, `Tempering time is automatically adjusted to the room temperature of ${roomTemp} °C: approximately ${temperingMin}–${temperingMax} minutes. At lower temperatures, it may take 1–2 hours. Make sure the dough balls do not over-ferment.`, `Čas temperiranja se samodejno prilagodi sobni temperaturi ${roomTemp} °C: približno ${temperingMin}–${temperingMax} minut. Pri nižjih temperaturah lahko traja 1–2 uri. Pazite, da kroglice ne fermentirajo preveč.`),
+      proofingInfo: pick('Prüfen Sie, ob der Teig zum Formen bereit ist: Die Teigkugel sollte weich, geschmeidig und leicht aufgegangen sein. Drücken Sie die Oberfläche leicht mit einem Finger ein. Der Teig sollte langsam zurückfedern. Wenn er noch sehr fest ist und sofort in seine ursprüngliche Form zurückkehrt, lassen Sie ihn noch etwas bei Raumtemperatur stehen.', 'Check whether the dough is ready for shaping: the dough ball should be soft, pliable, and slightly puffed. Gently press the surface with a finger; the dough should slowly spring back. If it is still very firm and immediately returns to its original shape, leave it at room temperature for a little longer.', 'Preverite, ali je testo pripravljeno za oblikovanje: kroglica mora biti mehka, prožna in rahlo napihnjena. Površino rahlo pritisnite s prstom; testo se mora počasi vrniti nazaj. Če je še zelo čvrsto in se takoj vrne v prvotno obliko, ga pustite še nekaj časa na sobni temperaturi.'),
+      ovenTimingInfo: oven === 'ooni'
+        ? pick(`Der Pizzaofen benötigt ungefähr ${ovenPreheatMin}–${ovenPreheatMax} Minuten zum Aufheizen. Damit die Aufheizzeit mit dem Temperieren der Teigkugeln abgestimmt ist, schalten Sie den Pizzaofen ${Math.max(0, ovenPreheatMin - temperingMax)}–${Math.max(0, ovenPreheatMax - temperingMin)} Minuten vor dem Herausnehmen der Teigkugeln aus dem Kühlschrank ein.`, `The pizza oven needs approximately ${ovenPreheatMin}–${ovenPreheatMax} minutes to heat up. To coordinate the heating time with the tempering of the dough balls, turn on the pizza oven ${Math.max(0, ovenPreheatMin - temperingMax)}–${Math.max(0, ovenPreheatMax - temperingMin)} minutes before taking the dough balls out of the refrigerator.`, `Pizza pečica potrebuje približno ${ovenPreheatMin}–${ovenPreheatMax} minut, da se segreje. Za uskladitev časa segrevanja s temperiranjem kroglic vklopite pizza pečico ${Math.max(0, ovenPreheatMin - temperingMax)}–${Math.max(0, ovenPreheatMax - temperingMin)} minut, preden kroglice vzamete iz hladilnika.`)
+        : pick(`Der Ofen benötigt ungefähr ${ovenPreheatMin}–${ovenPreheatMax} Minuten zum Aufheizen. Damit die Aufheizzeit mit dem Temperieren der Teigkugeln abgestimmt ist, schalten Sie den Ofen ${Math.max(0, ovenPreheatMin - temperingMax)}–${Math.max(0, ovenPreheatMax - temperingMin)} Minuten vor dem Herausnehmen der Teigkugeln aus dem Kühlschrank ein.`, `The oven needs approximately ${ovenPreheatMin}–${ovenPreheatMax} minutes to heat up. To coordinate the oven heating time with the tempering of the dough balls, turn on the oven ${Math.max(0, ovenPreheatMin - temperingMax)}–${Math.max(0, ovenPreheatMax - temperingMin)} minutes before taking the dough balls out of the refrigerator.`, `Pečica potrebuje približno ${ovenPreheatMin}–${ovenPreheatMax} minut, da se segreje. Za uskladitev časa segrevanja pečice s temperiranjem kroglic pečico vklopite ${Math.max(0, ovenPreheatMin - temperingMax)}–${Math.max(0, ovenPreheatMax - temperingMin)} minut, preden kroglice vzamete iz hladilnika.`),
+      bakingInfo: oven === 'homeStone' ? pick('Platzieren Sie den Pizzastein oder Pizzastahl zwei Einschubebenen unterhalb des oberen Heizelements.', 'Place the pizza stone or steel two rack positions below the upper heating element.', 'Kamen ali jeklo za pico postavite dve rešetki pod zgornji grelni element.') : undefined,
+      bakingCheckInfo: oven === 'homePan' ? pick('Heben Sie den Pizzarand an und prüfen Sie, ob der Boden ausreichend gebacken und goldbraun ist.', 'Lift the pizza rim and check whether the bottom is sufficiently baked and golden brown.', 'Dvignite rob pice in preverite, ali je dno dovolj pečeno in zlato-rjavo.') : undefined,
+      steps: oven === 'homePan' ? [
+        pick(`Nehmen Sie die Teigkugeln aus dem Kühlschrank und lassen Sie sie ${temperingMin}–${temperingMax} Minuten vor dem Formen temperieren. Achten Sie darauf, dass die Teigkugeln nicht überfermentieren.`, `Take the dough balls out of the refrigerator and let them temper for ${temperingMin}–${temperingMax} minutes before shaping. Make sure the dough balls do not over-ferment.`, `Kroglice vzemite iz hladilnika in jih pred oblikovanjem pustite ${temperingMin}–${temperingMax} minut temperirati. Pazite, da kroglice ne fermentirajo preveč.`),
+        pick('Nehmen Sie die Teigkugel mit einer schnellen und vorsichtigen Bewegung aus dem Behälter und legen Sie sie mit der Oberseite nach unten auf die Semola.', 'Quickly and gently remove the dough ball from the container and place it upside down on the semolina.', 'Kroglico hitro in nežno vzemite iz posode ter jo položite obrnjeno na zdrob.'),
+        pick('Fetten Sie das Backblech leicht ein.', 'Lightly oil the baking tray.', 'Pekač rahlo naoljite.'),
+        pick(`Legen Sie den geformten Teig direkt auf das Backblech und ziehen Sie ihn auf den Zieldurchmesser von ${diameter} cm.`, `Place the shaped dough directly in the baking tray and stretch it to the target diameter of ${diameter} cm.`, `Oblikovano testo položite neposredno v pekač in ga raztegnite na ciljni premer ${diameter} cm.`),
+        pick('Breiten Sie ihn vorsichtig mit den Fingern zu den Rändern aus. Drücken Sie nicht zu stark, damit Sie nicht die gesamte Luft herausdrücken.', 'Gently spread it toward the edges with your fingers. Do not press too hard so you do not push out all the air.', 'S prsti ga rahlo razširite proti robovom. Ne pritiskajte močno, da ne iztisnete vsega zraka.'),
+        pick('Lassen Sie den Teig im Backblech kurz entspannen und sich an die Form anpassen, falls er sich zurückzieht.', 'Let the dough briefly relax and adjust to the shape of the tray if it springs back.', 'Če se testo vrača nazaj, ga v pekaču pustite kratek čas počivati, da se sprosti in prilagodi obliki.'),
+        pick('Geben Sie die Sauce und den Belag darauf.', 'Add the sauce and toppings.', 'Dodajte omako in nadev.'),
+        pick('Heizen Sie den Ofen gründlich auf die maximale Temperatur vor.', 'Preheat the oven thoroughly to its maximum temperature.', 'Pečico dobro segrejte na najvišjo temperaturo.'),
+        pick('Wenn ein Pizza-Programm vorhanden ist, verwenden Sie es; wenn kein Pizza-Programm vorhanden ist, verwenden Sie Ober-/Unterhitze ohne Umluft.', 'If you have a Pizza program, use it; if you do not, use top and bottom heat without a fan.', 'Če imate program Pizza, ga uporabite; če ga nimate, uporabite zgornje in spodnje gretje brez ventilatorja.'),
+        pick('Backen Sie ohne Grill, bis der Boden und der Rand gut durchgebacken sind.', 'Bake without the grill until the bottom and rim are well baked.', 'Pecite brez žara, dokler dno in rob nista dobro pečena.'),
+        pick('Schalten Sie am Ende den Grill ein, wenn Sie die Oberseite stärker bräunen möchten.', 'Turn on the grill at the end if you want the top more deeply browned.', 'Na koncu vklopite žar, če želite močneje zapečeno zgornjo stran.'),
+        pick('Nehmen Sie die Pizza aus dem Ofen und lassen Sie sie kurz ruhen, bevor Sie sie schneiden.', 'Remove the pizza from the oven and let it rest briefly before slicing.', 'Pico vzemite iz pečice in jo pred rezanjem pustite kratek čas počivati.'),
+      ] : [
+        ovenSteps[0],
+        pick(`Nehmen Sie die Teigkugeln aus dem Kühlschrank und lassen Sie sie ${temperingMin}–${temperingMax} Minuten vor dem Formen temperieren. Achten Sie darauf, dass die Teigkugeln nicht überfermentieren.`, `Take the dough balls out of the refrigerator and let them temper for ${temperingMin}–${temperingMax} minutes before shaping. Make sure the dough balls do not over-ferment.`, `Kroglice vzemite iz hladilnika in jih pred oblikovanjem pustite ${temperingMin}–${temperingMax} minut temperirati. Pazite, da kroglice ne fermentirajo preveč.`),
+        pick('Bestäuben Sie die Arbeitsfläche leicht mit einer minimalen Menge Semola.', 'Lightly dust the work surface with a minimal amount of semolina.', 'Delovno površino rahlo posujte z minimalno količino zdroba.'),
+        pick('Nehmen Sie die Teigkugel mit einer schnellen und vorsichtigen Bewegung aus dem Behälter und legen Sie sie mit der Oberseite nach unten auf die Semola.', 'Quickly and gently remove the dough ball from the container and place it upside down on the semolina.', 'Kroglico hitro in nežno vzemite iz posode ter jo položite obrnjeno na zdrob.'),
+        pick('Drücken Sie mit den Fingerspitzen die Luft von der Mitte in Richtung Rand. Verwenden Sie kein Nudelholz.', 'Using your fingertips, push the air from the center toward the edges. Do not use a rolling pin.', 'S konicami prstov potiskajte zrak iz sredine proti robovom. Ne uporabljajte valjarja.'),
+        pick('Lassen Sie den Cornicione als optische Orientierung ungefähr 1–2 cm breit.', 'Leave approximately 1–2 cm of Cornicione as a visual guideline.', 'Rob Cornicione pustite približno 1–2 cm širok kot vizualno priporočilo.'),
+        pick(`Dehnen Sie den Teig auf den Ziel-Durchmesser von ${diameter} cm.`, `Stretch the dough to the target diameter of ${diameter} cm.`, `Testo raztegnite na ciljni premer ${diameter} cm.`),
+        pick('Schütteln Sie überschüssige Semola ab und legen Sie den Teig auf den Pizzaschieber.', 'Shake off excess semolina and transfer the dough onto the pizza peel.', 'Otresite odvečni zdrob in testo prenesite na lopar za pico.'),
+        pick('Belegen Sie die Pizza entsprechend ihrem Durchmesser und lassen Sie den Rand frei.', 'Add the toppings according to the pizza diameter, leaving the rim free of toppings.', 'Dodajte nadev glede na premer pice, rob pa pustite brez nadeva.'),
+        pick(`Für eine Pizza mit ${diameter} cm beträgt die voreingestellte Mozzarella-Menge ungefähr ${cheeseAmount} g.`, `For a ${diameter} cm pizza, the default mozzarella amount is approximately ${cheeseAmount} g.`, `Za pico premera ${diameter} cm je privzeta količina mocarele približno ${cheeseAmount} g.`),
+        pick('Schieben Sie die Pizza in den vorgeheizten Ofen.', 'Launch the pizza into the preheated oven.', 'Pico vstavite v predhodno segreto pečico.'),
+        ovenSteps[1],
+        ovenSteps[2],
+      ],
+      timers: [timer('tempering', temperingMidpoint, 'preBake')],
+    },
+  ];
+}
+
+const DURATION_PATTERN = /\b\d+(?:\s*(?:do|to|bis|[-–])\s*\d+)?\s*(?:sat|sata|sati|ur|ura|ure|hours?|hrs?|stunden?|h)\b/gi;
+const FRIDGE_PATTERN = /hladnjak|hladnjaku|hladnjaka|fridge|kühlschrank|hladilnik/i;
+const ROOM_PATTERN = /sobnoj temperaturi|sobnoj temp\.?|sobni temperaturi|room temperature|room temp\.?|raumtemperatur|raumtemp\.?/i;
+
+function hourLabel(lang: Lang) {
+  if (lang === 'en') return 'hours';
+  if (lang === 'de') return 'Stunden';
+  if (lang === 'sl') return 'ur';
+  return 'sati';
+}
+
+function replaceDurationBefore(text: string, phrase: RegExp, hours: number, label: string) {
+  const match = phrase.exec(text);
+  if (!match || match.index === undefined) return text;
+  const before = text.slice(0, match.index);
+  const durations = [...before.matchAll(DURATION_PATTERN)];
+  const duration = durations.at(-1);
+  if (!duration || duration.index === undefined || match.index - (duration.index + duration[0].length) > 80) return text;
+  return `${text.slice(0, duration.index)}${hours} ${label}${text.slice(duration.index + duration[0].length)}`;
+}
+
+function replaceDurationAfter(text: string, phrase: RegExp, hours: number, label: string) {
+  const match = phrase.exec(text);
+  if (!match || match.index === undefined) return text;
+  const afterStart = match.index + match[0].length;
+  const after = text.slice(afterStart);
+  const duration = DURATION_PATTERN.exec(after);
+  if (!duration || duration.index === undefined || duration.index > 80) return text;
+  const start = afterStart + duration.index;
+  return `${text.slice(0, start)}${hours} ${label}${text.slice(start + duration[0].length)}`;
+}
+
+function adaptFermentationSteps(steps: readonly string[], roomHours: number, fridgeHours: number, fridgeTemp: number, lang: Lang) {
+  const label = hourLabel(lang);
+  return steps
+    .filter((step) => fridgeHours > 0 || !FRIDGE_PATTERN.test(step))
+    .map((step) => {
+      let adapted = replaceDurationBefore(step, ROOM_PATTERN, roomHours, label);
+      if (fridgeHours > 0) {
+        adapted = replaceDurationAfter(adapted, FRIDGE_PATTERN, fridgeHours, label);
+        adapted = adapted.replace(/\d+(?:\s*[-–]\s*\d+)?\s*°C/g, `${fridgeTemp}°C`);
+      }
+      return adapted;
+    });
+}
+
+function adaptDirectPhaseSteps(phase: 'C' | 'D', steps: readonly string[], roomHours: number, fridgeHours: number, fridgeTemp: number, lang: Lang) {
+  const adapted = adaptFermentationSteps(steps, roomHours, fridgeHours, fridgeTemp, lang);
+  if (fridgeHours > 0) return adapted;
+
+  if (phase === 'D') {
+    return adapted.filter((step) => !/1\.5\s*[–-]\s*2\s*(?:sata|h|hours?|Stunden|ur)/i.test(step));
+  }
+
+  const roomStep = {
+    hr: `Ostavite loptice na sobnoj temperaturi ${roomHours} sati prije pečenja.`,
+    en: `Leave the dough balls at room temperature for ${roomHours} hours before baking.`,
+    de: `Lassen Sie die Teigkugeln ${roomHours} Stunden bei Raumtemperatur vor dem Backen stehen.`,
+    sl: `Kroglice pustite ${roomHours} ur na sobni temperaturi pred peko.`,
+  }[lang];
+  return [...adapted, roomStep];
+}
+
+function getDirectPhaseTimers(phaseKey: string, roomHours: number, fridgeHours: number): BaseTimer[] {
+  const timers = PHASE_TIMER_DURATIONS[phaseKey] || [];
+  if (phaseKey.endsWith('-B')) {
+    const rtTimers = timers.filter((timer) => timer.kind !== 'fridge');
+    if (fridgeHours <= 0) return rtTimers;
+    return [
+      ...rtTimers,
+      { id: 'fridge-custom', seconds: fridgeHours * 3600, kind: 'fridge' },
+    ];
+  }
+  if (phaseKey.endsWith('-C')) {
+    if (fridgeHours > 0) {
+      return timers.map((timer) => timer.kind === 'ballsFridge'
+        ? { ...timer, seconds: fridgeHours * 3600 }
+        : timer);
+    }
+    return [{ id: 'ballsRtHours', seconds: roomHours * 3600, kind: 'ballsRt' }];
+  }
+  if (phaseKey.endsWith('-D') && fridgeHours === 0) return [];
+  return timers;
+}
+
 function PhaseBlock({
-  title, steps, phaseKey, completed, onToggle,
+  title, steps, phaseKey, timers: customTimers, bigaInfo, waterInfo, containerOilInfo, fermentationInfo, fermentationSignsInfo, degassingInfo, doughHandlingInfo, temperingInfo, proofingInfo, ovenTimingInfo, bakingCheckInfo, bakingInfo, completed, onToggle,
   activeTimers, onStartTimer, onStopTimer, lang,
 }: {
   title: string;
   steps: readonly string[];
   phaseKey: string;
+  timers?: BaseTimer[];
+  bigaInfo?: string;
+  waterInfo?: string;
+  containerOilInfo?: string;
+  fermentationInfo?: string;
+  fermentationSignsInfo?: string;
+  degassingInfo?: string;
+  doughHandlingInfo?: string;
+  temperingInfo?: string;
+  proofingInfo?: string;
+  ovenTimingInfo?: string;
+  bakingCheckInfo?: string;
+  bakingInfo?: string;
   completed: Record<string, boolean>;
   onToggle: (key: string) => void;
   activeTimers: Record<string, { endsAt: number; label: string; notifId?: string | null }>;
@@ -841,7 +1936,42 @@ function PhaseBlock({
   onStopTimer: (phaseKey: string, timerId: string) => void;
   lang: Lang;
 }) {
-  const timers = PHASE_TIMER_DURATIONS[phaseKey] || [];
+  const timers = customTimers || PHASE_TIMER_DURATIONS[phaseKey] || [];
+  const toppingInfo = {
+    hr: 'Nadjev možeš staviti po želji, ali ga nemoj previše natovariti. Ostavi dovoljno ruba bez nadjeva kako bi se rub mogao lijepo podignuti i ispeći.',
+    en: 'Choose toppings according to preference, but do not overload the pizza. Leave enough of the rim without toppings so that it can rise and bake properly.',
+    de: 'Wählen Sie den Belag nach Wunsch, verwenden Sie jedoch nicht zu viel davon. Lassen Sie genügend Rand ohne Belag, damit er schön aufgehen und gleichmäßig backen kann.',
+    sl: 'Nadev izberite po želji, vendar pice ne obložite preveč. Pustite dovolj roba brez nadeva, da se lahko lepo dvigne in enakomerno speče.',
+  }[lang];
+  const toppingTitle = { hr: 'Nadjev', en: 'Toppings', de: 'Belag', sl: 'Nadev' }[lang];
+  const doughTemperatureInfo = {
+    hr: 'Ako želite provjeriti konačnu temperaturu tijesta, idealno je između 23 °C i 25 °C. Mjerenje nije obavezno; tijesto treba biti glatko, elastično i homogeno.',
+    en: 'If you want to check the final dough temperature, it should ideally be between 23 °C and 25 °C. Measuring is optional; the dough should be smooth, elastic, and homogeneous.',
+    de: 'Wenn Sie die endgültige Teigtemperatur überprüfen möchten, sollte sie idealerweise zwischen 23 °C und 25 °C liegen. Das Messen ist optional; der Teig sollte glatt, elastisch und homogen sein.',
+    sl: 'Če želite preveriti končno temperaturo testa, naj bo idealno med 23 °C in 25 °C. Merjenje ni obvezno; testo mora biti gladko, elastično in homogeno.',
+  }[lang];
+  const doughTemperatureTitle = { hr: 'Temperatura tijesta', en: 'Dough temperature', de: 'Teigtemperatur', sl: 'Temperatura testa' }[lang];
+  const proofingTestInfo = {
+    hr: 'Lagano pritisnite lopticu prstom. Ako se udubljenje polako vraća, spremna je za razvlačenje. Ako se odmah vrati, treba joj još vremena. Ako udubljenje ostane, loptica je prezrela i treba je odmah koristiti.',
+    en: 'Gently press the dough ball with your finger. If the indentation slowly springs back, it is ready to stretch. If it springs back immediately, it needs more time. If the indentation remains, the dough ball is over-proofed and should be used immediately.',
+    de: 'Drücken Sie die Teigkugel leicht mit dem Finger ein. Wenn die Vertiefung langsam zurückfedert, ist sie zum Ausformen bereit. Wenn sie sofort zurückfedert, braucht sie noch Zeit. Wenn die Vertiefung bleibt, ist die Teigkugel überfermentiert und sollte sofort verwendet werden.',
+    sl: 'Kroglico rahlo pritisnite s prstom. Če se vdolbina počasi vrne, je pripravljena za raztezanje. Če se takoj vrne, potrebuje še nekaj časa. Če vdolbina ostane, je kroglica preveč fermentirana in jo je treba takoj uporabiti.',
+  }[lang];
+  const infoTitles = {
+    biga: { hr: 'Postotak bige', en: 'Biga percentage', de: 'Biga-Anteil', sl: 'Odstotek bige' }[lang],
+    proofing: { hr: 'Test prstom', en: 'Finger test', de: 'Fingertest', sl: 'Test s prstom' }[lang],
+    water: { hr: 'Voda i led', en: 'Water and ice', de: 'Wasser und Eis', sl: 'Voda in led' }[lang],
+    container: { hr: 'Ulje za posudu', en: 'Container oil', de: 'Öl für den Behälter', sl: 'Olje za posodo' }[lang],
+    room: { hr: 'Temperatura prostorije', en: 'Room temperature', de: 'Raumtemperatur', sl: 'Sobna temperatura' }[lang],
+    signs: { hr: 'Znakovi fermentacije', en: 'Fermentation signs', de: 'Fermentationszeichen', sl: 'Znaki fermentacije' }[lang],
+    degassing: { hr: 'Degaziranje', en: 'Degassing', de: 'Entgasen', sl: 'Degaziranje' }[lang],
+    baking: { hr: 'Položaj kamena ili čelika', en: 'Stone or steel position', de: 'Position von Stein oder Stahl', sl: 'Položaj kamna ali jekla' }[lang],
+    handling: { hr: 'Ljepljivo tijesto', en: 'Sticky dough', de: 'Klebriger Teig', sl: 'Lepljivo testo' }[lang],
+    tempering: { hr: 'Temperiranje', en: 'Tempering', de: 'Temperieren', sl: 'Temperiranje' }[lang],
+    topping: toppingTitle,
+    readiness: { hr: 'Spremnost tijesta', en: 'Dough readiness', de: 'Teigreife', sl: 'Pripravljenost testa' }[lang],
+    ovenTiming: { hr: 'Usklađivanje vremena', en: 'Timing coordination', de: 'Zeitliche Abstimmung', sl: 'Časovna uskladitev' }[lang],
+  };
   return (
     <View style={{ marginBottom: SPACING.md }}>
       <Text style={styles.phaseTitle}>{title}</Text>
@@ -850,6 +1980,7 @@ function PhaseBlock({
           {timers.map((tm) => {
             const key = `${phaseKey}-${tm.id}`;
             const active = activeTimers[key];
+            // eslint-disable-next-line react-hooks/purity
             const remaining = active ? active.endsAt - Date.now() : 0;
             const kindLabel = TIMER_KIND_LABEL[lang][tm.kind];
             return (
@@ -878,13 +2009,28 @@ function PhaseBlock({
       {steps.map((s, i) => {
         const key = `${phaseKey}-${i}`;
         const done = !!completed[key];
+        const hasProofingInfo = /30[–-]60 minuta|30 do 60 minuta/i.test(s);
+        const hasBigaInfo = !!bigaInfo && i === 0;
+        const hasWaterInfo = !!waterInfo && /ukupno .*vode|total water|Wasser|skupno .*vode/i.test(s);
+        const hasContainerOilInfo = !!containerOilInfo && (/nauljite fermentacijsku posudu|Stavite kugle u zatvorenu fermentacijsku kutiju|oil the fermentation container|Ölen Sie den Fermentationsbehälter|Fermentacijsko posodo rahlo/i.test(s));
+        const hasFermentationInfo = !!fermentationInfo && /završni bulk|final bulk fermentation|abschließende Stockgare|Končno prvo fermentacijo|Lagano nauljite fermentacijsku posudu|Lightly oil the fermentation container|Ölen Sie den Fermentationsbehälter|Fermentacijsko posodo rahlo|Integralno tijesto|Whole wheat dough|Vollkornteig|Integralno testo/i.test(s);
+        const hasFermentationSignsInfo = !!fermentationSignsInfo && /Provjerite jesu li vidljivi|Check whether the first signs|Prüfen Sie, ob erste Anzeichen|Preverite, ali so vidni prvi znaki/i.test(s);
+        const hasDegassingInfo = !!degassingInfo && /minimalno degaziranje|minimizing degassing|möglichst starkes Entgasen|čim manj iztisnite plin/i.test(s);
+        const hasBakingInfo = !!bakingInfo && /Zagrijte kamen ili čelik|Preheat the pizza stone|Heizen Sie den Pizzastein|Kamen ali jeklo za pico segrevajte/i.test(s);
+        const hasDoughHandlingInfo = !!doughHandlingInfo && /Nastavite mijesiti|Nastavite miješati|Continue kneading|Continue mixing|Kneten Sie weiter|Mischen Sie weiter|Nadaljujte z gnetenjem|Nadaljujte z mešanjem/i.test(s);
+        const hasTemperingInfo = !!temperingInfo && /prijeđite na temperiranje|proceed to tempering|fahren Sie mit dem Temperieren|nadaljujte s temperiranjem|Stavite kugle u zatvorenu fermentacijsku kutiju|Place the dough balls in a closed fermentation box|Legen Sie die Teigkugeln in eine verschlossene Teigbox|Kroglice testa položite v zaprto/i.test(s);
+        const hasDoughTemperatureInfo = /Zamjes je gotov|The dough is fully mixed|Der Teig ist fertig geknetet|Gnetenje je končano/i.test(s);
+        const hasToppingInfo = /Dodajte nadjev|Add the toppings|Belegen Sie die Pizza|Dodajte nadev/i.test(s);
+        const hasProofingReadinessInfo = !!proofingInfo && /Izvadite kugle iz hladnjaka|Take the dough balls out|Nehmen Sie die Teigkugeln|Kroglice vzemite iz hladilnika|Vrhovima prstiju vrlo nježno|Using your fingertips very gently|Mit den Fingerspitzen sehr sanft|S konicami prstov zelo nežno|Integralnog|Integralno|Whole wheat|Vollkorn/i.test(s);
+        const hasOvenTimingInfo = !!ovenTimingInfo && /Izvadite kugle iz hladnjaka|Take the dough balls out|Nehmen Sie die Teigkugeln|Kroglice vzemite iz hladilnika/i.test(s);
+        const hasBakingCheckInfo = !!bakingCheckInfo && /Pecite bez grilla|Bake without the grill|Backen Sie ohne Grill|Pecite brez žara/i.test(s);
         return (
-          <Pressable
-            key={i}
-            testID={`step-${key}`}
-            onPress={() => onToggle(key)}
-            style={({ pressed }) => [styles.stepItem, pressed && { opacity: 0.7 }]}
-          >
+          <View key={i} style={styles.stepItem}>
+            <Pressable
+              testID={`step-${key}`}
+              onPress={() => onToggle(key)}
+              style={({ pressed }) => [{ flex: 1, flexDirection: 'row', alignItems: 'flex-start' }, pressed && { opacity: 0.7 }]}
+            >
             <View style={styles.stepCheckWrap}>
               {done ? (
                 <View style={styles.stepCheckDone}>
@@ -897,7 +2043,161 @@ function PhaseBlock({
               )}
             </View>
             <Text style={[styles.stepText, done && styles.stepTextDone]}>{s}</Text>
-          </Pressable>
+            </Pressable>
+            {hasProofingInfo ? (
+              <Pressable
+                accessibilityLabel="Informacije o testu prstom"
+                onPress={() => Alert.alert(infoTitles.proofing, proofingTestInfo)}
+                hitSlop={8}
+                style={styles.infoBtn}
+              >
+                <Icon name="information-circle-outline" size={19} color={COLORS.brand} />
+              </Pressable>
+            ) : null}
+            {hasBigaInfo ? (
+              <Pressable
+                accessibilityLabel="Informacije o postotku bige"
+                onPress={() => Alert.alert(infoTitles.biga, bigaInfo!)}
+                hitSlop={8}
+                style={styles.infoBtn}
+              >
+                <Icon name="information-circle-outline" size={19} color={COLORS.brand} />
+              </Pressable>
+            ) : null}
+            {hasWaterInfo ? (
+              <Pressable
+                accessibilityLabel="Informacije o temperaturi vode i ledu"
+                onPress={() => Alert.alert(infoTitles.water, waterInfo!)}
+                hitSlop={8}
+                style={styles.infoBtn}
+              >
+                <Icon name="information-circle-outline" size={19} color={COLORS.brand} />
+              </Pressable>
+            ) : null}
+            {hasContainerOilInfo ? (
+              <Pressable
+                accessibilityLabel="Informacije o ulju za fermentacijsku posudu"
+                onPress={() => Alert.alert(infoTitles.container, containerOilInfo!)}
+                hitSlop={8}
+                style={styles.infoBtn}
+              >
+                <Icon name="information-circle-outline" size={19} color={COLORS.brand} />
+              </Pressable>
+            ) : null}
+            {hasFermentationInfo ? (
+              <Pressable
+                accessibilityLabel="Informacije o temperaturi prostorije i fermentaciji"
+                onPress={() => Alert.alert(infoTitles.room, fermentationInfo!)}
+                hitSlop={8}
+                style={styles.infoBtn}
+              >
+                <Icon name="information-circle-outline" size={19} color={COLORS.brand} />
+              </Pressable>
+            ) : null}
+            {hasFermentationSignsInfo ? (
+              <Pressable
+                accessibilityLabel="Informacije o znakovima fermentacije"
+                onPress={() => Alert.alert(infoTitles.signs, fermentationSignsInfo!)}
+                hitSlop={8}
+                style={styles.infoBtn}
+              >
+                <Icon name="information-circle-outline" size={19} color={COLORS.brand} />
+              </Pressable>
+            ) : null}
+            {hasDegassingInfo ? (
+              <Pressable
+                accessibilityLabel="Informacije o degaziranju"
+                onPress={() => Alert.alert(infoTitles.degassing, degassingInfo!)}
+                hitSlop={8}
+                style={styles.infoBtn}
+              >
+                <Icon name="information-circle-outline" size={19} color={COLORS.brand} />
+              </Pressable>
+            ) : null}
+            {hasBakingInfo ? (
+              <Pressable
+                accessibilityLabel="Informacije o položaju kamena ili čelika"
+                onPress={() => Alert.alert(infoTitles.baking, bakingInfo!)}
+                hitSlop={8}
+                style={styles.infoBtn}
+              >
+                <Icon name="information-circle-outline" size={19} color={COLORS.brand} />
+              </Pressable>
+            ) : null}
+            {hasDoughHandlingInfo ? (
+              <Pressable
+                accessibilityLabel="Informacije o ljepljivom tijestu"
+                onPress={() => Alert.alert(infoTitles.handling, doughHandlingInfo!)}
+                hitSlop={8}
+                style={styles.infoBtn}
+              >
+                <Icon name="information-circle-outline" size={19} color={COLORS.brand} />
+              </Pressable>
+            ) : null}
+            {hasTemperingInfo ? (
+              <Pressable
+                accessibilityLabel="Informacije o temperiranju"
+                onPress={() => Alert.alert(infoTitles.tempering, temperingInfo!)}
+                hitSlop={8}
+                style={styles.infoBtn}
+              >
+                <Icon name="information-circle-outline" size={19} color={COLORS.brand} />
+              </Pressable>
+            ) : null}
+            {hasDoughTemperatureInfo ? (
+              <Pressable
+                accessibilityLabel="Informacije o temperaturi tijesta"
+                onPress={() => Alert.alert(doughTemperatureTitle, doughTemperatureInfo)}
+                hitSlop={8}
+                style={styles.infoBtn}
+              >
+                <Icon name="information-circle-outline" size={19} color={COLORS.brand} />
+              </Pressable>
+            ) : null}
+            {hasToppingInfo ? (
+              <Pressable
+                accessibilityLabel="Informacije o nadjevu"
+                onPress={() => Alert.alert(toppingTitle, toppingInfo)}
+                hitSlop={8}
+                style={styles.infoBtn}
+              >
+                <Icon name="information-circle-outline" size={19} color={COLORS.brand} />
+              </Pressable>
+            ) : null}
+            {hasProofingReadinessInfo ? (
+              <Pressable
+                accessibilityLabel="Informacije o spremnosti tijesta za oblikovanje"
+                onPress={() => Alert.alert(infoTitles.readiness, proofingInfo!)}
+                hitSlop={8}
+                style={styles.infoBtn}
+              >
+                <Icon name="information-circle-outline" size={19} color={COLORS.brand} />
+              </Pressable>
+            ) : null}
+            {hasOvenTimingInfo ? (
+              <Pressable
+                accessibilityLabel="Informacije o vremenu zagrijavanja pećnice"
+                onPress={() => Alert.alert(infoTitles.ovenTiming, ovenTimingInfo!)}
+                hitSlop={8}
+                style={styles.infoBtn}
+              >
+                <Icon name="information-circle-outline" size={19} color={COLORS.brand} />
+              </Pressable>
+            ) : null}
+            {hasBakingCheckInfo ? (
+              <Pressable
+                accessibilityLabel="Informacije o provjeri pečenosti dna"
+                onPress={() => Alert.alert(
+                  { hr: 'Provjera pečenosti', en: 'Baking check', de: 'Backkontrolle', sl: 'Preverjanje pečenosti' }[lang],
+                  bakingCheckInfo!,
+                )}
+                hitSlop={8}
+                style={styles.infoBtn}
+              >
+                <Icon name="information-circle-outline" size={19} color={COLORS.brand} />
+              </Pressable>
+            ) : null}
+          </View>
         );
       })}
     </View>
@@ -1079,15 +2379,29 @@ const styles = StyleSheet.create({
   card: { backgroundColor: COLORS.surfaceSecondary, padding: SPACING.lg, borderRadius: RADIUS.lg, borderWidth: 1, borderColor: COLORS.border, gap: SPACING.sm },
   cardTitle: { fontSize: 13, color: COLORS.brand, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: SPACING.sm },
   cardTitleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  styleHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  styleRowWrap: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  styleRow: { flex: 1, minHeight: 64, flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, paddingHorizontal: SPACING.sm, paddingVertical: 7, borderRadius: RADIUS.md, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.surface },
+  styleRowActive: { backgroundColor: COLORS.brand, borderColor: COLORS.brand },
+  styleThumb: { width: 52, height: 52, borderRadius: RADIUS.md },
+  styleCard: { width: 190, minHeight: 146, padding: SPACING.md, borderRadius: RADIUS.md, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.surface, gap: 4 },
+  styleCardActive: { borderColor: COLORS.brand, backgroundColor: COLORS.brandTertiary },
+  styleEmoji: { fontSize: 24 },
+  styleName: { color: COLORS.onSurface, fontSize: 15, fontWeight: '800' },
+  styleNameActive: { color: '#fff' },
+  styleDescription: { color: COLORS.muted, fontSize: 11, lineHeight: 15 },
+  styleDescriptionActive: { color: 'rgba(255,255,255,0.9)' },
   pizzaBadge: { width: 44, height: 44, marginBottom: SPACING.sm },
   mixingHero: { width: '100%', height: 100, marginBottom: SPACING.sm },
   mixIcon: { width: 24, height: 24 },
   // Proportional pizza preview
   pizzaPreviewWrap: { alignItems: 'center', marginTop: SPACING.md, paddingTop: SPACING.md, borderTopWidth: 1, borderTopColor: COLORS.divider, gap: 6 },
-  pizzaScale: { width: 200, height: 200, alignItems: 'center', justifyContent: 'center' },
+  pizzaScale: { width: 180, height: 180, alignItems: 'center', justifyContent: 'center' },
   pizzaCircleGhost: { position: 'absolute', borderRadius: 100, borderWidth: 1, borderColor: COLORS.border, borderStyle: 'dashed', backgroundColor: 'transparent' },
   pizzaCircle: { borderRadius: 100, backgroundColor: COLORS.brandTertiary, borderWidth: 2, borderColor: COLORS.brand, alignItems: 'center', justifyContent: 'center' },
   pizzaCircleText: { color: COLORS.brand, fontSize: 15, fontWeight: '800' },
+  pizzaPreviewImage: { maxWidth: 180, maxHeight: 180 },
+  pizzaPreviewLabel: { color: COLORS.brand, fontSize: 14, fontWeight: '800' },
   pizzaPreviewHint: { fontSize: 11, color: COLORS.muted, fontStyle: 'italic' },
   stepInput: { fontSize: 15, fontWeight: '800', color: COLORS.onSurface, minWidth: 38, maxWidth: 46, textAlign: 'center', padding: 0 },
   stepUnit: { fontSize: 12, color: COLORS.muted, fontWeight: '700', marginLeft: -2 },
@@ -1108,10 +2422,11 @@ const styles = StyleSheet.create({
   flourRowRange: { fontSize: 12, color: COLORS.muted, fontWeight: '600', marginTop: 2 },
   // NEW compact single-line flour row
   flourHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 4 },
-  flourHeaderText: { fontSize: 15, fontWeight: '700', color: COLORS.onSurface },
+  flourHeaderText: { fontSize: 15, fontWeight: '700', color: COLORS.brand },
   flourRowWrap: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   flourCompact: { flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: SPACING.md, paddingVertical: 10, borderRadius: RADIUS.md, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border, minHeight: 42 },
   flourCompactActive: { backgroundColor: COLORS.brand, borderColor: COLORS.brand },
+  flourIcon: { width: 28, height: 28, marginRight: 6 },
   flourCompactLabel: { fontSize: 13, fontWeight: '700', color: COLORS.onSurface, flexShrink: 1 },
   flourCompactSuffix: { fontSize: 12, color: COLORS.muted, fontWeight: '600', marginLeft: 6, flexShrink: 0 },
   infoBtn: { width: 26, height: 32, alignItems: 'center', justifyContent: 'center' },
@@ -1120,6 +2435,8 @@ const styles = StyleSheet.create({
   tooltipHeader: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm },
   tooltipTitle: { flex: 1, fontSize: 16, fontWeight: '800', color: COLORS.onSurface },
   tooltipBody: { fontSize: 13, color: COLORS.onSurfaceTertiary, lineHeight: 20 },
+  styleInfoImage: { width: '100%', height: 150, borderRadius: RADIUS.md, marginBottom: SPACING.md },
+  styleInfoLine: { color: COLORS.onSurface, fontSize: 13, lineHeight: 20, paddingVertical: 2 },
   // Timer chips
   timerRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: SPACING.sm },
   timerChip: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 6, borderRadius: RADIUS.pill, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border },
@@ -1140,21 +2457,25 @@ const styles = StyleSheet.create({
   stepperInRange: { borderColor: COLORS.brand },
   stepBtn: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
   stepVal: { fontSize: 16, fontWeight: '800', color: COLORS.onSurface, minWidth: 42, textAlign: 'center' },
+  stepValIdeal: { color: COLORS.success },
 
   chipRow: { gap: SPACING.sm, paddingRight: SPACING.md },
-  chip: { paddingHorizontal: SPACING.md, height: 36, borderRadius: RADIUS.pill, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  diameterRow: { flexDirection: 'row', gap: 6, alignItems: 'center' },
+  chip: { flex: 1, minWidth: 0, paddingHorizontal: 4, height: 36, borderRadius: RADIUS.pill, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border, alignItems: 'center', justifyContent: 'center' },
   chipActive: { backgroundColor: COLORS.brand, borderColor: COLORS.brand },
   chipText: { color: COLORS.onSurface, fontSize: 13, fontWeight: '600' },
   chipTextActive: { color: '#fff' },
-  customInput: { minWidth: 64, height: 36, borderRadius: RADIUS.pill, borderWidth: 1, borderColor: COLORS.borderStrong, borderStyle: 'dashed', paddingHorizontal: SPACING.md, fontSize: 13, color: COLORS.onSurface, textAlign: 'center' },
+  customInput: { width: 48, height: 36, borderRadius: RADIUS.pill, borderWidth: 1, borderColor: COLORS.borderStrong, borderStyle: 'dashed', paddingHorizontal: 4, fontSize: 13, color: COLORS.onSurface, textAlign: 'center' },
 
   pillGroup: { flexDirection: 'row', gap: SPACING.sm },
-  pill: { flex: 1, paddingVertical: 10, borderRadius: RADIUS.md, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border, alignItems: 'center' },
+  pill: { flex: 1, flexDirection: 'row', borderRadius: RADIUS.md, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border, alignItems: 'center' },
   pillActive: { backgroundColor: COLORS.brand, borderColor: COLORS.brand },
+  pillSelect: { flex: 1, alignItems: 'center', paddingVertical: 10 },
   pillText: { color: COLORS.onSurface, fontSize: 14, fontWeight: '700' },
   pillTextActive: { color: '#fff' },
 
   hydRow: { flexDirection: 'row', gap: SPACING.md, alignItems: 'flex-end', marginTop: SPACING.md },
+  labelWithInfo: { flexDirection: 'row', alignItems: 'center', gap: 4 },
 
   segmentedRow: { flexDirection: 'row', gap: 4, padding: 4, backgroundColor: COLORS.surface, borderRadius: RADIUS.md, borderWidth: 1, borderColor: COLORS.border },
   segBtn: { flex: 1, flexDirection: 'row', gap: 6, alignItems: 'center', justifyContent: 'center', paddingVertical: 10, borderRadius: RADIUS.sm },
@@ -1164,7 +2485,7 @@ const styles = StyleSheet.create({
   expandText: { color: COLORS.brand, fontSize: 13, fontWeight: '700' },
   stepsBox: { gap: SPACING.sm, paddingTop: SPACING.sm },
   stepItem: { flexDirection: 'row', gap: SPACING.md, alignItems: 'flex-start', marginBottom: 6, paddingVertical: 4 },
-  stepCheckWrap: { marginTop: 2 },
+  stepCheckWrap: { marginTop: 2, marginRight: 4 },
   stepNum: { width: 22, height: 22, borderRadius: 11, backgroundColor: COLORS.brand, alignItems: 'center', justifyContent: 'center' },
   stepNumText: { color: '#fff', fontSize: 11, fontWeight: '800' },
   stepCheckDone: { width: 22, height: 22, borderRadius: 11, backgroundColor: COLORS.success, alignItems: 'center', justifyContent: 'center' },
@@ -1177,13 +2498,18 @@ const styles = StyleSheet.create({
   ovenRow: { flexDirection: 'row', gap: SPACING.sm },
   ovenCard: { flex: 1, paddingVertical: SPACING.md, paddingHorizontal: SPACING.sm, borderRadius: RADIUS.md, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border, alignItems: 'center', gap: 6, minHeight: 88 },
   ovenCardActive: { backgroundColor: COLORS.brand, borderColor: COLORS.brand },
-  ovenIconWrap: { width: 52, height: 52, borderRadius: RADIUS.md, backgroundColor: COLORS.brandTertiary, alignItems: 'center', justifyContent: 'center' },
-  ovenIconWrapActive: { backgroundColor: 'rgba(255,255,255,0.2)' },
+  ovenIconWrap: { width: 52, height: 52, borderRadius: RADIUS.md, backgroundColor: 'transparent', alignItems: 'center', justifyContent: 'center' },
+  ovenIconWrapActive: { backgroundColor: 'transparent' },
   ovenImage: { width: 44, height: 44 },
   ovenEmoji: { fontSize: 30 },
   ovenText: { color: COLORS.onSurface, fontSize: 11, fontWeight: '700', textAlign: 'center' },
   bakeInstructions: { marginTop: SPACING.md, gap: SPACING.sm, paddingTop: SPACING.md, borderTopWidth: 1, borderTopColor: COLORS.divider },
-  bakeText: { fontSize: 14, color: COLORS.onSurface, fontWeight: '700' },
+  bakeTemperatureInputRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: SPACING.xs },
+  bakeTempLabel: { color: COLORS.muted, fontSize: 12, fontWeight: '700' },
+  bakeTempUnit: { color: COLORS.muted, fontSize: 12, fontWeight: '700' },
+  bakeTimeTable: { alignSelf: 'center', gap: 4 },
+  bakeTimeRow: { flexDirection: 'row', gap: SPACING.sm, justifyContent: 'center' },
+  bakeText: { width: '100%', alignSelf: 'center', textAlign: 'center', fontSize: 14, lineHeight: 21, color: COLORS.onSurface, fontWeight: '700' },
   bakeBody: { fontSize: 13, color: COLORS.onSurfaceTertiary, lineHeight: 19 },
 
   recipeCard: { backgroundColor: COLORS.surfaceSecondary, padding: SPACING.lg, borderRadius: RADIUS.lg, borderWidth: 1, borderColor: COLORS.border, gap: 4 },

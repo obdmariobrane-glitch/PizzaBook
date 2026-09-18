@@ -67,6 +67,38 @@ async def send_push(recipients: list, data: dict, idempotency_key: str = None):
 app = FastAPI()
 api_router = APIRouter(prefix="/api")
 
+@api_router.get("/app-update")
+async def app_update():
+    version = os.environ.get("APP_VERSION", "1.0.1")
+    version_code = int(os.environ.get("APP_VERSION_CODE", "2"))
+    apk_url = os.environ.get("APP_APK_URL", "")
+    message = os.environ.get("APP_UPDATE_MESSAGE", "Dostupna je nova verzija Pizzabooka.")
+
+    # Notify registered devices once when a new APK version is configured.
+    if apk_url and PUSH_KEY != "placeholder":
+        try:
+            marker = await db.app_update_notifications.update_one(
+                {"version_code": version_code},
+                {"$setOnInsert": {"version": version, "created_at": datetime.now(timezone.utc)}},
+                upsert=True,
+            )
+            if marker.upserted_id:
+                recipients = await db.users.distinct("user_id")
+                await send_push(
+                    recipients=recipients,
+                    data={"title": "Pizzabook update", "message": message, "action_url": apk_url},
+                    idempotency_key=f"pizzabook-update-{version_code}",
+                )
+        except Exception as exc:
+            logging.warning(f"app update notification failed: {exc}")
+
+    return {
+        "version": version,
+        "version_code": version_code,
+        "apk_url": apk_url,
+        "message": message,
+    }
+
 # ============ MODELS ============
 class User(BaseModel):
     user_id: str
@@ -86,6 +118,8 @@ class ProfileUpdate(BaseModel):
     equipment: Optional[str] = None
 
 class RecipeAttachment(BaseModel):
+    style_id: Optional[str] = None
+    style_params: Optional[dict] = None
     diameter_cm: Optional[float] = None
     hydration: Optional[float] = None
     method: Optional[str] = None
