@@ -544,7 +544,7 @@ export default function CalculatorHome() {
     oven === 'ooni' ? t.calc.ooniSteps : t.calc.homePanSteps;
   const styleBakingSteps = getStyleBakingSteps(pizzaStyle, oven, lang);
   const styleBakingTemp = getStyleBakingTemp(pizzaStyle, oven, lang);
-  const stylePreparationSteps = getStyleSteps(pizzaStyle, method, mixing, roomHours, fridgeHours, lang);
+  const stylePreparationSteps = getStyleSteps(pizzaStyle, method, mixing, roomHours, fridgeHours, lang, flour);
   const bakingPoints = oven === 'homePan'
     ? [{ temperature: 200, min: 15, max: 20 }, { temperature: 220, min: 13, max: 17 }, { temperature: 230, min: 12, max: 15 }, { temperature: 250, min: 10, max: 14 }, { temperature: 270, min: 8, max: 12 }, { temperature: 280, min: 7, max: 11 }, { temperature: 300, min: 6, max: 9 }]
     : oven === 'ooni'
@@ -563,7 +563,7 @@ export default function CalculatorHome() {
         remainingFlour: dough.main.flour,
         remainingWater: dough.main.water,
         pct: bigaPct,
-      }, flour)
+      }, undefined, flour)
     : method === 'poolish' && lang === 'hr'
       ? getDetailedDirectSteps(mixing, dough.total, dough.totalDough, pizzas, effectiveBall, diameter, fridgeHours, oven, ovenTemp, roomTemp, dims.cheese, undefined, {
         flour: dough.preferment?.flour ?? 0,
